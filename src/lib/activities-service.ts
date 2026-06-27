@@ -13,6 +13,7 @@ import {
   getTodayDateString,
   isDateWithinRange,
   isFutureDate,
+  isLoggableChallengeDate,
 } from "@/lib/dates";
 import { computeBasePoints, isBeastMode } from "@/lib/scoring";
 import { computeStandings, getStandingForUser } from "@/lib/standings-service";
@@ -172,9 +173,11 @@ export async function getActivitiesDashboard(userId: string) {
       );
       const canLog =
         inWindow &&
-        !isFuture &&
         !activity &&
-        compareDateStrings(day.date, today) <= 0;
+        isLoggableChallengeDate(day.date, config.startDate, config.endDate, {
+          timezone: appConfig.timezone,
+          allowOpenChallengeLogging: appConfig.allowOpenChallengeLogging,
+        });
 
       let state: DashboardDay["state"] = "not_logged";
       if (isFuture) {
@@ -228,15 +231,16 @@ export async function getLogContext(userId: string) {
     if (loggedDates.has(day.date)) {
       return false;
     }
-    if (isFutureDate(day.date, appConfig.timezone)) {
-      return false;
-    }
-    return isDateWithinRange(day.date, config.startDate, config.endDate);
+
+    return isLoggableChallengeDate(day.date, config.startDate, config.endDate, {
+      timezone: appConfig.timezone,
+      allowOpenChallengeLogging: appConfig.allowOpenChallengeLogging,
+    });
   });
 
   const defaultDate =
     selectableDays.find((day) => day.date === today)?.date ??
-    selectableDays.at(-1)?.date ??
+    selectableDays[0]?.date ??
     today;
 
   return {
@@ -244,6 +248,8 @@ export async function getLogContext(userId: string) {
     defaultDate,
     selectableDays,
     loggedDates: [...loggedDates],
+    challengeStartDate: config.startDate,
+    allowOpenChallengeLogging: appConfig.allowOpenChallengeLogging,
   };
 }
 
@@ -267,7 +273,10 @@ export async function createActivity(input: {
     throw new ActivityError("Date is outside the challenge window.", 400);
   }
 
-  if (isFutureDate(input.activityDate, appConfig.timezone)) {
+  if (
+    !appConfig.allowOpenChallengeLogging &&
+    isFutureDate(input.activityDate, appConfig.timezone)
+  ) {
     throw new ActivityError("Future dates cannot be logged.", 400);
   }
 

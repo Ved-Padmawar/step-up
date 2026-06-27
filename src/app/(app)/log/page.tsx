@@ -14,6 +14,8 @@ export default async function LogPage() {
 
   return (
     <LogActivityForm
+      allowOpenChallengeLogging={context.allowOpenChallengeLogging}
+      challengeStartDate={context.challengeStartDate}
       defaultDate={context.defaultDate}
       loggedDates={context.loggedDates}
       selectableDays={context.selectableDays}

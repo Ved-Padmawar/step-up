@@ -16,6 +16,8 @@ type LogActivityFormProps = {
   defaultDate: string;
   selectableDays: SelectableDay[];
   loggedDates: string[];
+  challengeStartDate: string;
+  allowOpenChallengeLogging: boolean;
 };
 
 type SubmitResult = {
@@ -65,6 +67,8 @@ export function LogActivityForm({
   defaultDate,
   selectableDays,
   loggedDates,
+  challengeStartDate,
+  allowOpenChallengeLogging,
 }: LogActivityFormProps) {
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
@@ -177,7 +181,9 @@ export function LogActivityForm({
         <p className="mt-3 text-muted">
           {loggedDates.length > 0
             ? "You have already logged every available day. Ask an admin to edit an entry if needed."
-            : "No challenge days are available to log right now."}
+            : allowOpenChallengeLogging
+              ? "No challenge days are available to log right now."
+              : `Logging opens on ${formatDisplayDate(challengeStartDate)}. Challenge days before today are not available yet.`}
         </p>
       </section>
     );

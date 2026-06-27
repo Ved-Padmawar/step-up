@@ -39,4 +39,24 @@ export function isFutureDate(date: string, timezone = IST_TIMEZONE): boolean {
   return compareDateStrings(date, getTodayDateString(timezone)) > 0;
 }
 
+export function isLoggableChallengeDate(
+  date: string,
+  startDate: string,
+  endDate: string,
+  options: {
+    timezone?: string;
+    allowOpenChallengeLogging?: boolean;
+  } = {},
+): boolean {
+  if (!isDateWithinRange(date, startDate, endDate)) {
+    return false;
+  }
+
+  if (options.allowOpenChallengeLogging) {
+    return true;
+  }
+
+  return !isFutureDate(date, options.timezone);
+}
+
 export { IST_TIMEZONE };
