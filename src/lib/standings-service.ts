@@ -5,6 +5,7 @@ import {
   challengeDay,
   users,
 } from "@/db/schema";
+import { getEffectiveScoringDate } from "@/lib/scoring-date";
 
 import {
   computeStandingsFromData,
@@ -73,6 +74,7 @@ export async function computeStandings(): Promise<UserStanding[]> {
       consistency6: configRow.consistency6,
       consistency7: configRow.consistency7,
     },
+    today: await getEffectiveScoringDate(),
   });
 }
 

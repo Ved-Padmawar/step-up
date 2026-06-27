@@ -39,6 +39,8 @@ export const challengeConfig = pgTable("challenge_config", {
   consistency7: integer("consistency_7").notNull().default(35),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
+  /** When set, bonus scoring treats the challenge as if this IST date has passed. */
+  scoringAsOfDate: date("scoring_as_of_date"),
 });
 
 export const activityStatusEnum = ["approved", "disapproved"] as const;

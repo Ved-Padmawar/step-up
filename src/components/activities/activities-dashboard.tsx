@@ -18,17 +18,25 @@ export function ActivitiesSummary({
   currentWeek = 1,
 }: ActivitiesSummaryProps) {
   const breakdown = standing?.breakdown;
+  const bonusTotal = breakdown
+    ? breakdown.starDay + breakdown.weekStar + breakdown.consistency
+    : 0;
 
   return (
     <section className="rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.2em] text-white/80">
-            Your score
+            Total points
           </p>
           <p className="mt-2 text-5xl font-semibold tabular-nums">
             {standing?.total ?? 0}
           </p>
+          {breakdown && bonusTotal > 0 ? (
+            <p className="mt-1 text-sm text-white/85">
+              {breakdown.base} from steps · {bonusTotal} in bonuses
+            </p>
+          ) : null}
           <p className="mt-2 text-sm text-white/85">
             Rank #{standing?.rank ?? "–"} of {participantCount || "–"}
           </p>
@@ -42,8 +50,8 @@ export function ActivitiesSummary({
       {breakdown ? (
         <div className="mt-5 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           <BreakdownPill label="Base" value={breakdown.base} />
-          <BreakdownPill label="Stars" value={breakdown.starDay} />
-          <BreakdownPill label="Week" value={breakdown.weekStar} />
+          <BreakdownPill label="Star day" value={breakdown.starDay} />
+          <BreakdownPill label="Week star" value={breakdown.weekStar} />
           <BreakdownPill label="Streak" value={breakdown.consistency} />
         </div>
       ) : null}
@@ -134,7 +142,7 @@ function ActivityDayRow({ day }: { day: DashboardDay }) {
             <p className="text-2xl font-semibold tabular-nums text-foreground">
               {activity.steps.toLocaleString("en-IN")}
             </p>
-            <p className="text-sm text-muted">+{activity.basePoints} pts</p>
+            <p className="text-sm text-muted">+{activity.basePoints} base pts</p>
           </div>
         ) : day.state === "future" ? (
           <p className="text-sm text-muted">Upcoming</p>

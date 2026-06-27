@@ -219,6 +219,71 @@ describe("computeStandingsFromData", () => {
     );
   });
 
+  it("withholds star of the day until the calendar day ends", () => {
+    const standings = computeStandingsFromData(
+      makeInput({
+        today: "2026-06-29",
+        users: [{ id: "u1", name: "Alice", createdAt: new Date("2026-06-01") }],
+        activities: [
+          {
+            userId: "u1",
+            activityDate: "2026-06-29",
+            steps: 10000,
+            basePoints: 30,
+            status: "approved",
+          },
+        ],
+      }),
+    );
+
+    assert.equal(standings[0]?.breakdown.base, 30);
+    assert.equal(standings[0]?.breakdown.starDay, 0);
+    assert.equal(standings[0]?.total, 30);
+  });
+
+  it("awards star of the day after the calendar day ends", () => {
+    const standings = computeStandingsFromData(
+      makeInput({
+        today: "2026-06-30",
+        users: [{ id: "u1", name: "Alice", createdAt: new Date("2026-06-01") }],
+        activities: [
+          {
+            userId: "u1",
+            activityDate: "2026-06-29",
+            steps: 10000,
+            basePoints: 30,
+            status: "approved",
+          },
+        ],
+      }),
+    );
+
+    assert.equal(standings[0]?.breakdown.starDay, 50);
+    assert.equal(standings[0]?.total, 80);
+  });
+
+  it("withholds week star until the week ends", () => {
+    const standings = computeStandingsFromData(
+      makeInput({
+        today: "2026-06-30",
+        users: [{ id: "u1", name: "Alice", createdAt: new Date("2026-06-01") }],
+        activities: [
+          {
+            userId: "u1",
+            activityDate: "2026-06-29",
+            steps: 10000,
+            basePoints: 30,
+            status: "approved",
+          },
+        ],
+      }),
+    );
+
+    assert.equal(standings[0]?.breakdown.weekStar, 0);
+    assert.equal(standings[0]?.breakdown.starDay, 50);
+    assert.equal(standings[0]?.total, 80);
+  });
+
   it("ranks by total, then steps, then earliest registration", () => {
     const standings = computeStandingsFromData(
       makeInput({

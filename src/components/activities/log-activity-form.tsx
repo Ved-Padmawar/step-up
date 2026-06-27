@@ -26,6 +26,12 @@ type SubmitResult = {
   isBeast: boolean;
   total: number | null;
   rank: number | null;
+  breakdown: {
+    base: number;
+    starDay: number;
+    weekStar: number;
+    consistency: number;
+  } | null;
 };
 
 async function compressImage(file: File): Promise<File> {
@@ -139,21 +145,41 @@ export function LogActivityForm({
       isBeast: payload.isBeast,
       total: payload.total,
       rank: payload.rank,
+      breakdown: payload.breakdown ?? null,
     });
   }
 
   if (result) {
+    const bonusPoints =
+      (result.breakdown?.starDay ?? 0) +
+      (result.breakdown?.weekStar ?? 0) +
+      (result.breakdown?.consistency ?? 0);
+
     return (
       <section className="rounded-3xl border border-black/5 bg-surface p-6">
         <p className="text-sm uppercase tracking-[0.2em] text-brand">Logged</p>
         <h1 className="mt-2 text-3xl font-semibold text-foreground">
-          +{result.basePoints} points today
+          +{result.basePoints} base points
         </h1>
-        <p className="mt-3 text-muted">
-          {result.isStarOfDay
-            ? "Nice — Star of the Day so far!"
-            : "Steps saved and counted toward your score."}
-        </p>
+        {bonusPoints > 0 ? (
+          <div className="mt-3 space-y-1 text-sm text-muted">
+            {result.breakdown?.starDay ? (
+              <p>+{result.breakdown.starDay} Star of the Day</p>
+            ) : null}
+            {result.breakdown?.weekStar ? (
+              <p>+{result.breakdown.weekStar} Star of the Week</p>
+            ) : null}
+            {result.breakdown?.consistency ? (
+              <p>+{result.breakdown.consistency} consistency bonus</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-muted">
+            {result.isStarOfDay
+              ? "Nice — Star of the Day so far!"
+              : "Steps saved and counted toward your score."}
+          </p>
+        )}
         {result.isBeast ? (
           <p className="mt-2 font-medium text-foreground">🔥 Beast Mode unlocked</p>
         ) : null}
@@ -161,6 +187,7 @@ export function LogActivityForm({
           <p className="mt-4 text-sm text-muted">
             Total score {result.total}
             {result.rank ? ` · Rank #${result.rank}` : ""}
+            {bonusPoints > 0 ? " (base + bonuses)" : ""}
           </p>
         ) : null}
         <button

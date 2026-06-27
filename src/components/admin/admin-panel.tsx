@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import type { AdminScoringResult } from "@/lib/scoring-admin-service";
 import type {
   AdminActivityRow,
   AdminUserRow,
@@ -11,6 +12,7 @@ import type {
 import { cn } from "@/lib/cn";
 import { photoProxyUrl } from "@/lib/blob-storage";
 import { formatDisplayDate } from "@/lib/dates";
+import type { UserStanding } from "@/lib/standings";
 
 type ChallengeDayOption = {
   date: string;
@@ -23,20 +25,27 @@ type AdminPanelProps = {
   users: AdminUserRow[];
   challengeDays: ChallengeDayOption[];
   currentAdminId: string;
+  initialScoring: AdminScoringResult;
 };
 
-type Tab = "activities" | "participants";
+type Tab = "activities" | "participants" | "scoring";
 
 export function AdminPanel({
   initialActivities,
   users,
   challengeDays,
   currentAdminId,
+  initialScoring,
 }: AdminPanelProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("activities");
   const [activities, setActivities] = useState(initialActivities);
   const [participantRows, setParticipantRows] = useState(users);
+  const [scoring, setScoring] = useState(initialScoring);
+  const [scoringDateInput, setScoringDateInput] = useState(
+    initialScoring.state.scoringAsOfDate ?? initialScoring.state.effectiveDate,
+  );
+  const [scoringBusy, setScoringBusy] = useState(false);
   const [userFilter, setUserFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -137,6 +146,36 @@ export function AdminPanel({
     }
   }
 
+  async function runScoring(body: Record<string, unknown>, successMessage: string) {
+    setScoringBusy(true);
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch("/api/admin/scoring/recompute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const payload = (await response.json()) as AdminScoringResult & {
+      error?: string;
+    };
+
+    setScoringBusy(false);
+
+    if (!response.ok) {
+      setError(payload.error ?? "Scoring run failed.");
+      return;
+    }
+
+    setScoring(payload);
+    setScoringDateInput(
+      payload.state.scoringAsOfDate ?? payload.state.effectiveDate,
+    );
+    setMessage(successMessage);
+    router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <header className="rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-sm">
@@ -153,6 +192,9 @@ export function AdminPanel({
         </TabButton>
         <TabButton active={tab === "participants"} onClick={() => setTab("participants")}>
           Participants
+        </TabButton>
+        <TabButton active={tab === "scoring"} onClick={() => setTab("scoring")}>
+          Scoring
         </TabButton>
       </div>
 
@@ -194,12 +236,32 @@ export function AdminPanel({
           userFilter={userFilter}
           users={users}
         />
-      ) : (
+      ) : tab === "participants" ? (
         <ParticipantsTab
           busyId={busyId}
           currentAdminId={currentAdminId}
           onToggleRole={toggleRole}
           users={participantRows}
+        />
+      ) : (
+        <ScoringTab
+          busy={scoringBusy}
+          dateInput={scoringDateInput}
+          onAdvanceDay={() =>
+            runScoring({ advanceDays: 1 }, "Scoring advanced by one day.")
+          }
+          onClearOverride={() =>
+            runScoring({ asOfDate: null }, "Scoring reset to calendar today.")
+          }
+          onRecompute={() => runScoring({}, "Scores recomputed.")}
+          onSetDate={() =>
+            runScoring(
+              { asOfDate: scoringDateInput },
+              `Scoring date set to ${formatDisplayDate(scoringDateInput)}.`,
+            )
+          }
+          onDateInputChange={setScoringDateInput}
+          scoring={scoring}
         />
       )}
 
@@ -503,6 +565,121 @@ function ParticipantsTab({
         </article>
       ))}
     </section>
+  );
+}
+
+function ScoringTab({
+  scoring,
+  dateInput,
+  busy,
+  onDateInputChange,
+  onRecompute,
+  onSetDate,
+  onClearOverride,
+  onAdvanceDay,
+}: {
+  scoring: AdminScoringResult;
+  dateInput: string;
+  busy: boolean;
+  onDateInputChange: (value: string) => void;
+  onRecompute: () => void;
+  onSetDate: () => void;
+  onClearOverride: () => void;
+  onAdvanceDay: () => void;
+}) {
+  const { state, standings, computedAt } = scoring;
+
+  return (
+    <section className="space-y-4">
+      <article className="rounded-3xl border border-black/5 bg-surface p-5">
+        <h2 className="text-lg font-semibold text-foreground">Scoring clock</h2>
+        <p className="mt-2 text-sm text-muted">
+          Star-of-day and week bonuses only apply after the scoring date passes each
+          day or week. Use an override to test without waiting for real calendar time.
+        </p>
+
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-2xl bg-background px-4 py-3">
+            <dt className="text-muted">Calendar today (IST)</dt>
+            <dd className="mt-1 font-semibold text-foreground">
+              {formatDisplayDate(state.calendarToday)}
+            </dd>
+          </div>
+          <div className="rounded-2xl bg-background px-4 py-3">
+            <dt className="text-muted">Effective scoring date</dt>
+            <dd className="mt-1 font-semibold text-foreground">
+              {formatDisplayDate(state.effectiveDate)}
+              {state.usingOverride ? (
+                <span className="ml-2 text-xs font-medium text-brand">override</span>
+              ) : null}
+            </dd>
+          </div>
+        </dl>
+
+        <label className="mt-4 block space-y-1 text-sm">
+          <span className="font-medium text-foreground">Scoring as-of date</span>
+          <input
+            className="field-input"
+            onChange={(event) => onDateInputChange(event.target.value)}
+            type="date"
+            value={dateInput}
+          />
+        </label>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <ActionButton disabled={busy} onClick={onRecompute} variant="primary">
+            Recompute scores
+          </ActionButton>
+          <ActionButton disabled={busy} onClick={onSetDate} variant="ghost">
+            Set date & recompute
+          </ActionButton>
+          <ActionButton disabled={busy} onClick={onAdvanceDay} variant="ghost">
+            Advance 1 day
+          </ActionButton>
+          <ActionButton disabled={busy} onClick={onClearOverride} variant="ghost">
+            Use calendar today
+          </ActionButton>
+        </div>
+
+        <p className="mt-3 text-xs text-muted">
+          Last computed {new Date(computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST
+        </p>
+      </article>
+
+      <article className="rounded-3xl border border-black/5 bg-surface p-5">
+        <h2 className="text-lg font-semibold text-foreground">Current standings</h2>
+        {standings.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">No participants yet.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {standings.map((row) => (
+              <ScoringStandingRow key={row.userId} row={row} />
+            ))}
+          </div>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function ScoringStandingRow({ row }: { row: UserStanding }) {
+  return (
+    <div className="rounded-2xl bg-background px-4 py-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-medium text-foreground">
+            #{row.rank} {row.name}
+          </p>
+          <p className="mt-1 text-muted">
+            Base {row.breakdown.base} · Star {row.breakdown.starDay} · Week{" "}
+            {row.breakdown.weekStar} · Streak {row.breakdown.consistency}
+          </p>
+        </div>
+        <p className="text-2xl font-semibold tabular-nums text-foreground">
+          {row.total}
+        </p>
+      </div>
+    </div>
   );
 }
 

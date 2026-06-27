@@ -55,6 +55,8 @@ export type StandingsInput = {
   activities: ActivityInput[];
   challengeDays: ChallengeDayInput[];
   config: ChallengeConfigInput;
+  /** IST calendar date; star/week/consistency bonuses apply only after the period ends. */
+  today?: string;
 };
 
 const DEFAULT_CONFIG: ChallengeConfigInput = {
@@ -96,12 +98,43 @@ function buildWeekDates(challengeDays: ChallengeDayInput[]) {
   return weeks;
 }
 
+function buildWeekEndDates(challengeDays: ChallengeDayInput[]) {
+  const weekEnds = new Map<number, string>();
+  for (const day of challengeDays) {
+    const current = weekEnds.get(day.weekNo);
+    if (!current || day.date > current) {
+      weekEnds.set(day.weekNo, day.date);
+    }
+  }
+  return weekEnds;
+}
+
+function hasDayEnded(date: string, today?: string): boolean {
+  if (!today) {
+    return true;
+  }
+  return date < today;
+}
+
+function hasWeekEnded(weekNo: number, weekEndDates: Map<number, string>, today?: string): boolean {
+  if (!today) {
+    return true;
+  }
+  const weekEnd = weekEndDates.get(weekNo);
+  if (!weekEnd) {
+    return false;
+  }
+  return weekEnd < today;
+}
+
 export function computeStandingsFromData(
   input: StandingsInput,
 ): UserStanding[] {
   const config = input.config ?? DEFAULT_CONFIG;
+  const today = input.today;
   const challengeDayMap = buildChallengeDayMap(input.challengeDays);
   const weekDates = buildWeekDates(input.challengeDays);
+  const weekEndDates = buildWeekEndDates(input.challengeDays);
   const approved = input.activities.filter(
     (activity) => activity.status === "approved",
   );
@@ -169,7 +202,11 @@ export function computeStandingsFromData(
   const starDayBonusByUser = new Map<string, number>();
   const starDayCountByUser = new Map<string, number>();
 
-  for (const [, userSteps] of stepsByDate) {
+  for (const [date, userSteps] of stepsByDate) {
+    if (!hasDayEnded(date, today)) {
+      continue;
+    }
+
     const maxSteps = Math.max(...userSteps.values(), 0);
     if (maxSteps <= 0) {
       continue;
@@ -193,6 +230,10 @@ export function computeStandingsFromData(
   const weekStarCountByUser = new Map<string, number>();
 
   for (const [weekNo] of weekDates) {
+    if (!hasWeekEnded(weekNo, weekEndDates, today)) {
+      continue;
+    }
+
     const weeklyTotals = new Map<string, number>();
 
     for (const user of input.users) {
@@ -228,6 +269,10 @@ export function computeStandingsFromData(
     let consistencyTotal = 0;
 
     for (const weekNo of weekDates.keys()) {
+      if (!hasWeekEnded(weekNo, weekEndDates, today)) {
+        continue;
+      }
+
       consistencyTotal += consistencyBonusForWeek(
         userWeekDays.get(weekNo) ?? 0,
         config,

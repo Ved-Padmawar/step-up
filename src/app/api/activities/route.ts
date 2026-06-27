@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         isBeast: result.isBeast,
         rank: result.standing?.rank ?? null,
         total: result.standing?.total ?? null,
+        breakdown: result.standing?.breakdown ?? null,
       },
       { status: 201 },
     );

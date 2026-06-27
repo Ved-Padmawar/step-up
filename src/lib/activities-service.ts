@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { appConfig } from "@/config";
 import { uploadBlob } from "@/lib/blob-storage";
+import { getEffectiveScoringDate } from "@/lib/scoring-date";
 import { getDb } from "@/db";
 import {
   activities,
@@ -93,6 +94,7 @@ function buildStarOfDayKeys(
     activityDate: string;
     steps: number;
   }[],
+  today: string,
 ): Set<string> {
   const stepsByDate = new Map<string, Map<string, number>>();
 
@@ -109,6 +111,10 @@ function buildStarOfDayKeys(
   const winners = new Set<string>();
 
   for (const [date, userSteps] of stepsByDate) {
+    if (compareDateStrings(date, today) >= 0) {
+      continue;
+    }
+
     const maxSteps = Math.max(...userSteps.values(), 0);
     if (maxSteps <= 0) {
       continue;
@@ -128,7 +134,8 @@ export async function getActivitiesDashboard(userId: string) {
   const db = getDb();
   const { config, days, today } = await getChallengeWindow();
 
-  const [userActivities, approvedForStars, standings] = await Promise.all([
+  const [userActivities, approvedForStars, standings, scoringDate] =
+    await Promise.all([
     db
       .select({
         id: activities.id,
@@ -150,6 +157,7 @@ export async function getActivitiesDashboard(userId: string) {
       })
       .from(activities),
     computeStandings(),
+    getEffectiveScoringDate(),
   ]);
 
   const activityByDate = new Map(
@@ -157,6 +165,7 @@ export async function getActivitiesDashboard(userId: string) {
   );
   const starOfDayKeys = buildStarOfDayKeys(
     approvedForStars.filter((activity) => activity.status === "approved"),
+    scoringDate,
   );
   const standing = getStandingForUser(standings, userId);
 
@@ -361,8 +370,10 @@ export async function createActivity(input: {
     })
     .from(activities);
 
+  const scoringDate = await getEffectiveScoringDate();
   const starOfDayKeys = buildStarOfDayKeys(
     approvedActivities.filter((activity) => activity.status === "approved"),
+    scoringDate,
   );
   const standings = await computeStandings();
 

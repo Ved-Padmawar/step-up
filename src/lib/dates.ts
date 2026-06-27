@@ -27,6 +27,15 @@ export function compareDateStrings(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+export function addDaysToDateString(date: string, days: number): string {
+  const parsed = parseDateString(date);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function isDateWithinRange(
   date: string,
   startDate: string,
