@@ -51,9 +51,13 @@ Production URL: **https://step-up-pearl.vercel.app**
 ## Build order (from spec)
 
 1. ✅ Scaffold + Drizzle schema + seed
-2. Auth (register/login/session)
+2. ✅ Auth (register/login/session, bcrypt, route protection)
 3. `computeStandings()` scoring engine
 4. Log activity + activities dashboard
 5. Leaderboard
 6. Admin moderation
 7. Visual polish
+
+### Admin login (seeded locally)
+
+Set `ADMIN_NAME`, `ADMIN_MOBILE`, and `ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:seed-admin`.
