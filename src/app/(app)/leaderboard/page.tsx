@@ -1,10 +1,21 @@
-export default function LeaderboardPage() {
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { LeaderboardView } from "@/components/leaderboard/leaderboard-view";
+import { computeStandings } from "@/lib/standings-service";
+
+export default async function LeaderboardPage() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const standings = await computeStandings();
+
   return (
-    <section className="rounded-3xl border border-black/5 bg-surface p-6">
-      <h1 className="text-2xl font-semibold text-foreground">Leaderboard</h1>
-      <p className="mt-2 text-muted">
-        Rankings will appear here once standings are implemented.
-      </p>
-    </section>
+    <LeaderboardView
+      currentUserId={session.user.id}
+      standings={standings}
+    />
   );
 }

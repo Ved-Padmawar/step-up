@@ -1,0 +1,150 @@
+import type { UserStanding } from "@/lib/standings";
+
+type LeaderboardViewProps = {
+  standings: UserStanding[];
+  currentUserId: string;
+};
+
+export function LeaderboardView({
+  standings,
+  currentUserId,
+}: LeaderboardViewProps) {
+  const hasScores = standings.some((row) => row.total > 0 || row.totalSteps > 0);
+  const topThree = standings.filter((row) => row.rank <= 3);
+
+  return (
+    <div className="space-y-6">
+      <header className="rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-sm">
+        <p className="text-sm uppercase tracking-[0.2em] text-white/80">
+          Overall standings
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold">Leaderboard</h1>
+        <p className="mt-2 text-sm text-white/85">
+          {standings.length} participants · ranked by total points
+        </p>
+      </header>
+
+      {!hasScores ? (
+        <section className="rounded-3xl border border-black/5 bg-surface p-8 text-center">
+          <p className="text-lg font-medium text-foreground">No scores yet</p>
+          <p className="mt-2 text-muted">
+            Once people start logging steps, rankings will show up here.
+          </p>
+        </section>
+      ) : (
+        <>
+          {topThree.length > 0 ? (
+            <section className="grid gap-3 sm:grid-cols-3">
+              {topThree.map((row) => (
+                <PodiumCard
+                  currentUserId={currentUserId}
+                  key={row.userId}
+                  row={row}
+                />
+              ))}
+            </section>
+          ) : null}
+
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">
+              Full rankings
+            </h2>
+            {standings.map((row) => (
+              <LeaderboardRow
+                currentUserId={currentUserId}
+                key={row.userId}
+                row={row}
+              />
+            ))}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PodiumCard({
+  row,
+  currentUserId,
+}: {
+  row: UserStanding;
+  currentUserId: string;
+}) {
+  const isCurrentUser = row.userId === currentUserId;
+  const medalClass =
+    row.rank === 1
+      ? "bg-medal-gold"
+      : row.rank === 2
+        ? "bg-medal-silver"
+        : "bg-medal-bronze";
+
+  return (
+    <article
+      className={`rounded-3xl border border-black/5 p-4 ${medalClass} ${isCurrentUser ? "ring-2 ring-brand ring-offset-2 ring-offset-background" : ""} ${row.rank === 1 ? "sm:-translate-y-1 sm:shadow-md" : ""}`}
+    >
+      <p className="text-sm font-semibold uppercase tracking-wide text-foreground/70">
+        #{row.rank} {row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : "🥉"}
+      </p>
+      <p className="mt-2 truncate text-lg font-semibold text-foreground">
+        {row.name}
+        {isCurrentUser ? " (You)" : ""}
+      </p>
+      <p className="mt-3 text-3xl font-semibold tabular-nums text-foreground">
+        {row.total}
+      </p>
+      <p className="text-sm text-foreground/70">points</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground/80">
+        <span>{row.daysMet} days met</span>
+        <span>⭐ {row.starDayCount}</span>
+        <span>🔥 {row.beastCount}</span>
+      </div>
+    </article>
+  );
+}
+
+function LeaderboardRow({
+  row,
+  currentUserId,
+}: {
+  row: UserStanding;
+  currentUserId: string;
+}) {
+  const isCurrentUser = row.userId === currentUserId;
+  const medalAccent =
+    row.rank === 1
+      ? "border-l-4 border-l-medal-gold"
+      : row.rank === 2
+        ? "border-l-4 border-l-medal-silver"
+        : row.rank === 3
+          ? "border-l-4 border-l-medal-bronze"
+          : "border-l-4 border-l-transparent";
+
+  return (
+    <article
+      className={`flex items-center gap-3 rounded-2xl border border-black/5 bg-surface px-4 py-3 ${medalAccent} ${isCurrentUser ? "bg-brand/5 ring-1 ring-brand/20" : ""}`}
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background text-sm font-bold text-foreground">
+        {row.rank}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-foreground">
+          {row.name}
+          {isCurrentUser ? (
+            <span className="ml-2 text-sm font-semibold text-brand">You</span>
+          ) : null}
+        </p>
+        <p className="mt-0.5 text-xs text-muted">
+          {row.daysMet} days met · ⭐ {row.starDayCount} · 🔥 {row.beastCount}
+        </p>
+      </div>
+
+      <div className="text-right">
+        <p className="text-xl font-semibold tabular-nums text-foreground">
+          {row.total}
+        </p>
+        <p className="text-xs text-muted">pts</p>
+      </div>
+    </article>
+  );
+}
