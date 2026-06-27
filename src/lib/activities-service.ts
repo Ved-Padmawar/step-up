@@ -1,7 +1,7 @@
-import { put } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 
 import { appConfig } from "@/config";
+import { uploadBlob } from "@/lib/blob-storage";
 import { getDb } from "@/db";
 import {
   activities,
@@ -325,11 +325,7 @@ export async function createActivity(input: {
     input.photo.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
   const pathname = `activities/${input.userId}/${input.activityDate}-${Date.now()}.${extension}`;
 
-  const uploaded = await put(pathname, input.photo, {
-    access: "public",
-    token: appConfig.blobReadWriteToken,
-    contentType: input.photo.type,
-  });
+  const uploaded = await uploadBlob(pathname, input.photo, input.photo.type);
 
   const basePoints = computeBasePoints(
     input.steps,

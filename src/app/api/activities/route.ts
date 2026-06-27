@@ -1,3 +1,4 @@
+import { BlobError } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
@@ -54,6 +55,10 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof ActivityError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
+    if (error instanceof BlobError) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     console.error(error);

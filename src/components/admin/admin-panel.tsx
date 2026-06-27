@@ -9,6 +9,7 @@ import type {
   AdminUserRow,
 } from "@/lib/admin-service";
 import { cn } from "@/lib/cn";
+import { photoProxyUrl } from "@/lib/blob-storage";
 import { formatDisplayDate } from "@/lib/dates";
 
 type ChallengeDayOption = {
@@ -310,7 +311,7 @@ function ActivitiesTab({
             onApprove={() => onApprove(row)}
             onDisapprove={(note) => onDisapprove(row, note)}
             onEdit={(steps, activityDate) => onEdit(row, steps, activityDate)}
-            onPreviewPhoto={() => onPreviewPhoto(row.photoUrl)}
+            onPreviewPhoto={() => onPreviewPhoto(photoProxyUrl(row.photoUrl))}
             row={row}
           />
         ))
@@ -354,7 +355,7 @@ function ActivityAdminCard({
             className="object-cover"
             fill
             sizes="80px"
-            src={row.photoUrl}
+            src={photoProxyUrl(row.photoUrl)}
             unoptimized
           />
         </button>
