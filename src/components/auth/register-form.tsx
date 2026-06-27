@@ -71,7 +71,7 @@ export function RegisterForm() {
           <span className="text-sm font-medium text-foreground">Name</span>
           <input
             autoComplete="name"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             name="name"
             onChange={(event) => setName(event.target.value)}
             placeholder="Your name"
@@ -85,7 +85,7 @@ export function RegisterForm() {
           <span className="text-sm font-medium text-foreground">Mobile</span>
           <input
             autoComplete="tel"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             inputMode="numeric"
             name="mobile"
             onChange={(event) => setMobile(event.target.value)}
@@ -100,7 +100,7 @@ export function RegisterForm() {
           <span className="text-sm font-medium text-foreground">Password</span>
           <input
             autoComplete="new-password"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             minLength={8}
             name="password"
             onChange={(event) => setPassword(event.target.value)}
@@ -117,7 +117,7 @@ export function RegisterForm() {
           </span>
           <input
             autoComplete="new-password"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             minLength={8}
             name="confirmPassword"
             onChange={(event) => setConfirmPassword(event.target.value)}

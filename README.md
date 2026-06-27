@@ -51,5 +51,5 @@ The app reads config from `src/config.ts` at build/runtime, so no Vercel env set
 3. ✅ `computeStandings()` scoring engine
 4. ✅ Log activity + activities dashboard
 5. ✅ Leaderboard
-6. Admin moderation
-7. Visual polish
+6. ✅ Admin moderation
+7. ✅ Visual polish

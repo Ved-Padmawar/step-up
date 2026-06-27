@@ -57,7 +57,7 @@ export function LoginForm() {
           <span className="text-sm font-medium text-foreground">Mobile</span>
           <input
             autoComplete="tel"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             inputMode="numeric"
             name="mobile"
             onChange={(event) => setMobile(event.target.value)}
@@ -72,7 +72,7 @@ export function LoginForm() {
           <span className="text-sm font-medium text-foreground">Password</span>
           <input
             autoComplete="current-password"
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             name="password"
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Your password"

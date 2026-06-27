@@ -39,3 +39,28 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+.field-input {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgb(0 0 0 / 0.1);
+  background: var(--background);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  outline: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.field-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--brand);
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--brand);
+}

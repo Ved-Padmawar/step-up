@@ -9,11 +9,13 @@ import { formatDisplayDate } from "@/lib/dates";
 type ActivitiesSummaryProps = {
   standing?: UserStanding;
   participantCount: number;
+  currentWeek?: number;
 };
 
 export function ActivitiesSummary({
   standing,
   participantCount,
+  currentWeek = 1,
 }: ActivitiesSummaryProps) {
   const breakdown = standing?.breakdown;
 
@@ -45,6 +47,20 @@ export function ActivitiesSummary({
           <BreakdownPill label="Streak" value={breakdown.consistency} />
         </div>
       ) : null}
+
+      <div className="mt-5 flex items-end gap-2">
+        {[1, 2, 3, 4].map((week) => (
+          <div className="flex flex-1 flex-col items-center gap-1" key={week}>
+            <div
+              className={`w-full rounded-full ${week <= currentWeek ? "bg-gold" : "bg-white/20"}`}
+              style={{ height: `${8 + week * 4}px` }}
+            />
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-white/80">
+              W{week}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

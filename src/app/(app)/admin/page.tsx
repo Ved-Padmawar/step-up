@@ -1,5 +1,12 @@
-import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { AdminPanel } from "@/components/admin/admin-panel";
+import {
+  listAdminActivities,
+  listAdminUsers,
+} from "@/lib/admin-service";
+import { getChallengeWindow } from "@/lib/activities-service";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -8,12 +15,18 @@ export default async function AdminPage() {
     redirect("/activities");
   }
 
+  const [{ days }, activities, users] = await Promise.all([
+    getChallengeWindow(),
+    listAdminActivities(),
+    listAdminUsers(),
+  ]);
+
   return (
-    <section className="rounded-3xl border border-black/5 bg-surface p-6">
-      <h1 className="text-2xl font-semibold text-foreground">Admin</h1>
-      <p className="mt-2 text-muted">
-        Activity moderation and participant management come later in the build.
-      </p>
-    </section>
+    <AdminPanel
+      challengeDays={days}
+      currentAdminId={session.user.id}
+      initialActivities={activities}
+      users={users}
+    />
   );
 }

@@ -194,7 +194,7 @@ export function LogActivityForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-foreground">Date</span>
           <select
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             onChange={(event) => setDate(event.target.value)}
             required
             value={date}
@@ -211,7 +211,7 @@ export function LogActivityForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-foreground">Steps</span>
           <input
-            className="w-full rounded-2xl border border-black/10 bg-background px-4 py-3 text-base outline-none ring-brand focus:ring-2"
+            className="field-input"
             inputMode="numeric"
             min={0}
             onChange={(event) => setSteps(event.target.value)}
