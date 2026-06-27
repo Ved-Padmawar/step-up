@@ -9,12 +9,20 @@ Mobile-first web app for a 29-day group steps challenge. See [docs/Steps_Challen
 - [Tailwind CSS 4](https://tailwindcss.com)
 - Deployed on [Vercel](https://vercel.com)
 
+## Configuration
+
+All secrets and connection strings live in one file:
+
+**`src/config.ts`** — database URL, auth secret, admin login, timezone.
+
+Edit that file when you need to change credentials. No `.env` files required.
+
 ## Local development
 
 ```bash
 pnpm install
-cp .env.example .env.local   # add DATABASE_URL and other secrets
-pnpm db:setup                # push schema + seed challenge days
+pnpm db:setup        # push schema + seed challenge days
+pnpm db:seed-admin   # create/update admin user from config
 pnpm dev
 ```
 
@@ -26,38 +34,22 @@ Open [http://localhost:3000](http://localhost:3000).
 | --- | --- |
 | `pnpm db:push` | Push Drizzle schema to Neon |
 | `pnpm db:seed` | Seed challenge config + 29 challenge days |
+| `pnpm db:seed-admin` | Seed admin user from `src/config.ts` |
 | `pnpm db:setup` | `db:push` then `db:seed` |
+| `pnpm test:scoring` | Run scoring unit tests |
 
-## Environment variables
+## Deploy
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `DATABASE_URL` | Yes | Neon Postgres connection string |
-| `AUTH_SECRET` | Before auth | Session signing secret |
-| `BLOB_READ_WRITE_TOKEN` | Before uploads | Vercel Blob for activity photos |
+Push to `main` — GitHub auto-deploys to Vercel at **https://step-up-pearl.vercel.app**.
 
-## Deploy on Vercel
-
-The project is linked to **rvfitness/step-up** with GitHub auto-deploy from `main`.
-
-Set `DATABASE_URL` (and other secrets) in the Vercel project settings or via:
-
-```bash
-npx vercel env add DATABASE_URL
-```
-
-Production URL: **https://step-up-pearl.vercel.app**
+The app reads config from `src/config.ts` at build/runtime, so no Vercel env setup is needed.
 
 ## Build order (from spec)
 
 1. ✅ Scaffold + Drizzle schema + seed
-2. ✅ Auth (register/login/session, bcrypt, route protection)
+2. ✅ Auth (register/login/session)
 3. `computeStandings()` scoring engine
 4. Log activity + activities dashboard
 5. Leaderboard
 6. Admin moderation
 7. Visual polish
-
-### Admin login (seeded locally)
-
-Set `ADMIN_NAME`, `ADMIN_MOBILE`, and `ADMIN_PASSWORD` in `.env.local`, then run `pnpm db:seed-admin`.

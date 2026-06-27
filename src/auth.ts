@@ -3,6 +3,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import { getDb } from "@/db";
+import { appConfig } from "@/config";
 import { users } from "@/db/schema";
 import { normalizeMobile, validateIndianMobile } from "@/lib/mobile";
 import { verifyPassword } from "@/lib/password";
@@ -30,6 +31,7 @@ declare module "next-auth" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: appConfig.authSecret,
   trustHost: true,
   session: { strategy: "jwt" },
   pages: {

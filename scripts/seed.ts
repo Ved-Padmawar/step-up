@@ -1,8 +1,3 @@
-import { config } from "dotenv";
-
-config({ path: ".env.local" });
-config();
-
 import { sql } from "drizzle-orm";
 
 import { createDb } from "../src/db";
