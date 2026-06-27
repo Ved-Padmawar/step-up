@@ -12,8 +12,8 @@ Next.js app configured for deployment on [Vercel](https://vercel.com).
 ## Local development
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -22,7 +22,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Push this repo to GitHub: `https://github.com/nitinmp/step-up`
 2. Import the repository in the [Vercel dashboard](https://vercel.com/new)
-3. Vercel auto-detects Next.js — no extra build settings required
+3. Vercel auto-detects Next.js and uses pnpm from `pnpm-lock.yaml`
 
 Or deploy from the CLI:
 
@@ -40,7 +40,7 @@ npx vercel --prod
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Create a production build |
-| `npm run start` | Serve the production build |
-| `npm run lint` | Run ESLint |
+| `pnpm dev` | Start the development server |
+| `pnpm build` | Create a production build |
+| `pnpm start` | Serve the production build |
+| `pnpm lint` | Run ESLint |
