@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useState } from "react";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -35,7 +35,12 @@ export function LoginForm() {
       return;
     }
 
-    router.push(callbackUrl);
+    const session = await getSession();
+    if (session?.user?.mustChangePassword) {
+      router.push("/change-password");
+    } else {
+      router.push(callbackUrl);
+    }
     router.refresh();
   }
 

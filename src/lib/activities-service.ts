@@ -18,6 +18,7 @@ import {
 } from "@/lib/dates";
 import { computeBasePoints, isBeastMode } from "@/lib/scoring";
 import { computeStandings, getStandingForUser } from "@/lib/standings-service";
+import { distanceKmToStorage, parseDistanceKm } from "@/lib/distance";
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -39,6 +40,7 @@ export type ActivityRecord = {
   id: string;
   activityDate: string;
   steps: number;
+  distanceKm: string;
   basePoints: number;
   status: string;
   adminNote: string | null;
@@ -174,6 +176,7 @@ export async function getActivitiesDashboard(userId: string) {
         id: activities.id,
         activityDate: activities.activityDate,
         steps: activities.steps,
+        distanceKm: activities.distanceKm,
         basePoints: activities.basePoints,
         status: activities.status,
         adminNote: activities.adminNote,
@@ -309,6 +312,7 @@ export async function createActivity(input: {
   userId: string;
   activityDate: string;
   steps: number;
+  distanceKm: string | number;
   photo: File;
 }) {
   const db = getDb();
@@ -332,8 +336,22 @@ export async function createActivity(input: {
     throw new ActivityError("Future dates cannot be logged.", 400);
   }
 
-  if (!Number.isInteger(input.steps) || input.steps < 0) {
-    throw new ActivityError("Steps must be a whole number ≥ 0.", 400);
+  if (!Number.isInteger(input.steps) || input.steps <= 0) {
+    throw new ActivityError("Steps must be a whole number greater than 0.", 400);
+  }
+
+  let distanceKm: number;
+  try {
+    distanceKm = parseDistanceKm(input.distanceKm);
+  } catch (error) {
+    throw new ActivityError(
+      error instanceof Error ? error.message : "Invalid distance.",
+      400,
+    );
+  }
+
+  if (distanceKm <= 0) {
+    throw new ActivityError("Distance must be greater than 0 km.", 400);
   }
 
   if (!input.photo || input.photo.size === 0) {
@@ -368,7 +386,7 @@ export async function createActivity(input: {
 
   if (existing) {
     throw new ActivityError(
-      "Already logged for this date — ask an admin to edit.",
+      "You already logged activity for this day. Each participant can log once per day.",
       409,
     );
   }
@@ -391,6 +409,7 @@ export async function createActivity(input: {
       userId: input.userId,
       activityDate: input.activityDate,
       steps: input.steps,
+      distanceKm: distanceKmToStorage(distanceKm),
       photoUrl: uploaded.url,
       status: "pending",
       basePoints,
@@ -399,6 +418,7 @@ export async function createActivity(input: {
       id: activities.id,
       activityDate: activities.activityDate,
       steps: activities.steps,
+      distanceKm: activities.distanceKm,
       basePoints: activities.basePoints,
       status: activities.status,
       photoUrl: activities.photoUrl,

@@ -92,6 +92,7 @@ export async function POST(request: Request) {
     mobile,
     passwordHash,
     role: "user",
+    mustChangePassword: false,
   });
 
   return NextResponse.json({ ok: true }, { status: 201 });

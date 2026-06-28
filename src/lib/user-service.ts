@@ -6,6 +6,11 @@ import { getDb } from "@/db";
 import { activities, users } from "@/db/schema";
 import { ActivityError } from "@/lib/activities-service";
 import { uploadBlob } from "@/lib/blob-storage";
+import {
+  DEFAULT_PARTICIPANT_PASSWORD,
+  isDefaultParticipantPassword,
+} from "@/lib/default-password";
+import { hashPassword, verifyPassword } from "@/lib/password";
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -157,6 +162,62 @@ export async function updateUserProfile(
   }
 
   return updated;
+}
+
+export async function changeUserPassword(
+  userId: string,
+  input: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  },
+) {
+  const currentPassword = input.currentPassword;
+  const newPassword = input.newPassword;
+  const confirmPassword = input.confirmPassword;
+
+  if (newPassword.length < 8) {
+    throw new ActivityError("New password must be at least 8 characters.", 400);
+  }
+
+  if (isDefaultParticipantPassword(newPassword)) {
+    throw new ActivityError("Choose a password other than the default.", 400);
+  }
+
+  if (newPassword !== confirmPassword) {
+    throw new ActivityError("New passwords do not match.", 400);
+  }
+
+  const db = getDb();
+  const [existing] = await db
+    .select({
+      id: users.id,
+      passwordHash: users.passwordHash,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!existing) {
+    throw new ActivityError("User not found.", 404);
+  }
+
+  const valid = await verifyPassword(currentPassword, existing.passwordHash);
+  if (!valid) {
+    throw new ActivityError("Current password is incorrect.", 400);
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      mustChangePassword: false,
+    })
+    .where(eq(users.id, userId));
+
+  return { ok: true as const };
 }
 
 export async function deleteUserAndData(

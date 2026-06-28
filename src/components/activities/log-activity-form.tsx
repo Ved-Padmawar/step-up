@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { fireActivityLogConfetti } from "@/lib/confetti";
 import { formatDisplayDate } from "@/lib/dates";
+import { parseDistanceKm } from "@/lib/distance";
 
 type SelectableDay = {
   date: string;
@@ -79,16 +81,25 @@ export function LogActivityForm({
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
   const [steps, setSteps] = useState("");
+  const [distanceKm, setDistanceKm] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
 
+  const loggedDateSet = useMemo(() => new Set(loggedDates), [loggedDates]);
+
   const selectedDay = useMemo(
     () => selectableDays.find((day) => day.date === date),
     [date, selectableDays],
   );
+
+  useEffect(() => {
+    if (result) {
+      fireActivityLogConfetti();
+    }
+  }, [result]);
 
   async function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -109,8 +120,15 @@ export function LogActivityForm({
     event.preventDefault();
     setError(null);
 
+    if (loggedDateSet.has(date)) {
+      setError(
+        "You already logged activity for this day. Each participant can log once per day.",
+      );
+      return;
+    }
+
     if (!photo) {
-      setError("Attach a photo before logging steps.");
+      setError("Attach a photo before logging activity.");
       return;
     }
 
@@ -119,11 +137,33 @@ export function LogActivityForm({
       return;
     }
 
+    const stepsValue = Number(steps);
+    if (!Number.isInteger(stepsValue) || stepsValue <= 0) {
+      setError("Enter a whole number of steps greater than 0.");
+      return;
+    }
+
+    try {
+      const distanceValue = parseDistanceKm(distanceKm);
+      if (distanceValue <= 0) {
+        setError("Enter distance greater than 0 km.");
+        return;
+      }
+    } catch (validationError) {
+      setError(
+        validationError instanceof Error
+          ? validationError.message
+          : "Enter a valid distance in km.",
+      );
+      return;
+    }
+
     setLoading(true);
 
     const formData = new FormData();
     formData.append("date", date);
     formData.append("steps", steps);
+    formData.append("distanceKm", distanceKm);
     formData.append("photo", photo);
 
     const response = await fetch("/api/activities", {
@@ -207,10 +247,10 @@ export function LogActivityForm({
   if (selectableDays.length === 0) {
     return (
       <section className="rounded-3xl border border-black/5 bg-surface p-6">
-        <h1 className="text-2xl font-semibold text-foreground">Log steps</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Log activity</h1>
         <p className="mt-3 text-muted">
           {loggedDates.length > 0
-            ? "You have already logged every available day. Ask an admin to edit an entry if needed."
+            ? "You have already logged every available day. Each participant can log once per day — ask an admin to edit an entry if needed."
             : allowOpenChallengeLogging
               ? "No challenge days are available to log right now."
               : `Logging opens on ${formatDisplayDate(challengeStartDate)}. Challenge days before today are not available yet.`}
@@ -221,9 +261,9 @@ export function LogActivityForm({
 
   return (
     <section className="rounded-3xl border border-black/5 bg-surface p-6">
-      <h1 className="text-2xl font-semibold text-foreground">Log steps</h1>
+      <h1 className="text-2xl font-semibold text-foreground">Log activity</h1>
       <p className="mt-2 text-sm text-muted">
-        Photo proof is required. Targets climb each week.
+        One entry per day. Add steps and distance from your fitness app screenshot.
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -244,19 +284,37 @@ export function LogActivityForm({
           </select>
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-foreground">Steps</span>
-          <input
-            className="field-input"
-            inputMode="numeric"
-            min={0}
-            onChange={(event) => setSteps(event.target.value)}
-            placeholder="Steps walked"
-            required
-            type="number"
-            value={steps}
-          />
-        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-foreground">Steps</span>
+            <input
+              className="field-input"
+              inputMode="numeric"
+              min={1}
+              onChange={(event) => setSteps(event.target.value)}
+              placeholder="e.g. 10432"
+              required
+              step={1}
+              type="number"
+              value={steps}
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-foreground">Distance (km)</span>
+            <input
+              className="field-input"
+              inputMode="decimal"
+              min={0}
+              onChange={(event) => setDistanceKm(event.target.value)}
+              placeholder="e.g. 5.43"
+              required
+              step={0.001}
+              type="number"
+              value={distanceKm}
+            />
+          </label>
+        </div>
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-foreground">Photo</span>
@@ -295,7 +353,7 @@ export function LogActivityForm({
           disabled={loading || !photo}
           type="submit"
         >
-          {loading ? "Uploading…" : "Log steps"}
+          {loading ? "Uploading…" : "Log activity"}
         </button>
       </form>
     </section>

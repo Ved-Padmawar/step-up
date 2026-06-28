@@ -38,6 +38,7 @@ export function BottomNav({ isAdmin }: BottomNavProps) {
 
           return (
             <Link
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "rounded-2xl px-2 py-3 text-center text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                 active

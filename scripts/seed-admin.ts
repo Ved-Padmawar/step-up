@@ -20,6 +20,7 @@ async function main() {
       mobile,
       passwordHash,
       role: "admin",
+      mustChangePassword: false,
     })
     .onConflictDoUpdate({
       target: users.mobile,
@@ -27,6 +28,7 @@ async function main() {
         name,
         passwordHash,
         role: "admin",
+        mustChangePassword: false,
       },
     });
 

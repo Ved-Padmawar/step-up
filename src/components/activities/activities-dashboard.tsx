@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DashboardDay, WeekStat } from "@/lib/activities-service";
 import type { UserStanding } from "@/lib/standings";
 import { formatDisplayDate } from "@/lib/dates";
+import { formatDistanceKm } from "@/lib/distance";
 
 type ActivitiesSummaryProps = {
   standing?: UserStanding;
@@ -150,6 +151,9 @@ function ActivityLogRow({ day }: { day: LoggedActivityDay }) {
         <div className="text-right">
           <p className="text-2xl font-semibold tabular-nums text-foreground">
             {activity.steps.toLocaleString("en-IN")}
+          </p>
+          <p className="text-sm text-muted tabular-nums">
+            {formatDistanceKm(activity.distanceKm)}
           </p>
           {day.state === "disapproved" ? (
             <p className="text-sm font-medium text-danger">Disapproved</p>

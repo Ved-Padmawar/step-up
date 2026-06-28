@@ -18,6 +18,7 @@ declare module "next-auth" {
       mobile: string;
       role: string;
       profileImageUrl: string | null;
+      mustChangePassword: boolean;
     };
   }
 
@@ -29,6 +30,7 @@ declare module "next-auth" {
     mobile: string;
     role: string;
     profileImageUrl: string | null;
+    mustChangePassword: boolean;
   }
 }
 
@@ -63,6 +65,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: users.role,
             passwordHash: users.passwordHash,
             profileImageUrl: users.profileImageUrl,
+            mustChangePassword: users.mustChangePassword,
           })
           .from(users)
           .where(eq(users.mobile, mobile))
@@ -85,6 +88,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           mobile: user.mobile,
           role: user.role,
           profileImageUrl: user.profileImageUrl,
+          mustChangePassword: user.mustChangePassword,
         } satisfies import("next-auth").User;
       },
     }),
@@ -97,6 +101,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role;
         token.mobile = user.mobile;
         token.profileImageUrl = user.profileImageUrl ?? null;
+        token.mustChangePassword = user.mustChangePassword;
       }
 
       if (trigger === "update" && session?.user) {
@@ -105,6 +110,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         if (session.user.profileImageUrl !== undefined) {
           token.profileImageUrl = session.user.profileImageUrl;
+        }
+        if (session.user.mustChangePassword !== undefined) {
+          token.mustChangePassword = session.user.mustChangePassword;
         }
       }
 
@@ -122,6 +130,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.profileImageUrl === undefined || token.profileImageUrl === null
             ? null
             : String(token.profileImageUrl),
+        mustChangePassword: token.mustChangePassword === true,
       };
       return session;
     },

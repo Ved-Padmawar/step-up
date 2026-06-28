@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AdminScoringResult } from "@/lib/scoring-admin-service";
 import type {
@@ -12,6 +12,8 @@ import type {
 import { cn } from "@/lib/cn";
 import { photoProxyUrl } from "@/lib/blob-storage";
 import { formatDisplayDate } from "@/lib/dates";
+import { formatDistanceKm } from "@/lib/distance";
+import { DEFAULT_PARTICIPANT_PASSWORD } from "@/lib/default-password";
 import type { UserStanding } from "@/lib/standings";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -31,8 +33,138 @@ type AdminPanelProps = {
 
 type AdminTab = "review" | "approved" | "participants" | "scoring";
 
+const ADMIN_TABS: AdminTab[] = ["review", "approved", "participants", "scoring"];
+const MOBILE_VISIBLE_TABS = 3;
+
 const adminTabTriggerClass =
-  "shrink-0 px-2 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground data-active:text-brand data-active:font-semibold after:bg-brand sm:px-3";
+  "shrink-0 px-2 py-2.5 text-sm font-medium sm:px-3 group-data-[variant=line]/tabs-list:aria-selected:bg-brand/10 group-data-[variant=line]/tabs-list:data-[active]:bg-brand/10";
+
+function getAdminTabLabel(
+  tab: AdminTab,
+  reviewCount: number,
+  approvedCount: number,
+): string {
+  if (tab === "review") {
+    return `Review${reviewCount > 0 ? ` (${reviewCount})` : ""}`;
+  }
+  if (tab === "approved") {
+    return `Approved${approvedCount > 0 ? ` (${approvedCount})` : ""}`;
+  }
+  if (tab === "participants") {
+    return "Participants";
+  }
+  return "Scoring";
+}
+
+function promoteTabToVisibleEnd(
+  order: AdminTab[],
+  tab: AdminTab,
+  visibleCount: number,
+): AdminTab[] {
+  const rest = order.filter((entry) => entry !== tab);
+  return [...rest.slice(0, visibleCount - 1), tab, ...rest.slice(visibleCount - 1)];
+}
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isMobile;
+}
+
+function AdminTabOverflowMenu({
+  tabs,
+  activeTab,
+  getLabel,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  tabs: AdminTab[];
+  activeTab: AdminTab;
+  getLabel: (tab: AdminTab) => string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (tab: AdminTab) => void;
+}) {
+  const activeInOverflow = tabs.includes(activeTab);
+
+  return (
+    <div className="relative mb-0.5 shrink-0 sm:hidden">
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+          activeInOverflow
+            ? "bg-brand/10 font-semibold text-brand"
+            : "text-muted hover:bg-brand/5 hover:text-foreground",
+        )}
+        onClick={() => onOpenChange(!open)}
+        type="button"
+      >
+        More
+        <ChevronDownIcon className={cn("size-4 transition", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <>
+          <button
+            aria-label="Close menu"
+            className="fixed inset-0 z-20"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          />
+          <div
+            className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] overflow-hidden rounded-xl border border-black/10 bg-surface py-1 shadow-lg ring-1 ring-black/5"
+            role="menu"
+          >
+            {tabs.map((tab) => (
+              <button
+                className={cn(
+                  "block w-full px-4 py-2.5 text-left text-sm transition hover:bg-brand/5",
+                  activeTab === tab
+                    ? "bg-brand/10 font-semibold text-brand"
+                    : "text-foreground",
+                )}
+                key={tab}
+                onClick={() => onSelect(tab)}
+                role="menuitem"
+                type="button"
+              >
+                {getLabel(tab)}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 export function AdminPanel({
   initialActivities,
@@ -53,10 +185,14 @@ export function AdminPanel({
   const [userFilter, setUserFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [addParticipantOpen, setAddParticipantOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [mobileTabOrder, setMobileTabOrder] = useState<AdminTab[]>(ADMIN_TABS);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const reviewCount = useMemo(
     () =>
@@ -87,6 +223,37 @@ export function AdminPanel({
       return false;
     });
   }, [activities, userFilter, dateFilter, adminTab]);
+
+  const visibleTabs = isMobile
+    ? mobileTabOrder.slice(0, MOBILE_VISIBLE_TABS)
+    : ADMIN_TABS;
+  const overflowTabs = isMobile ? mobileTabOrder.slice(MOBILE_VISIBLE_TABS) : [];
+
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+
+    setMobileTabOrder((current) => {
+      const visible = current.slice(0, MOBILE_VISIBLE_TABS);
+      if (visible.includes(adminTab)) {
+        return current;
+      }
+      return promoteTabToVisibleEnd(current, adminTab, MOBILE_VISIBLE_TABS);
+    });
+  }, [adminTab, isMobile]);
+
+  function selectAdminTab(tab: AdminTab) {
+    setAdminTab(tab);
+    setFiltersOpen(false);
+    setOverflowMenuOpen(false);
+
+    if (isMobile && !visibleTabs.includes(tab)) {
+      setMobileTabOrder((current) =>
+        promoteTabToVisibleEnd(current, tab, MOBILE_VISIBLE_TABS),
+      );
+    }
+  }
 
   async function refreshActivities() {
     const params = new URLSearchParams();
@@ -171,13 +338,6 @@ export function AdminPanel({
   }
 
   async function deleteParticipant(user: AdminUserRow) {
-    const confirmed = window.confirm(
-      `Delete ${user.name}? This removes all their activities, photos, and profile data permanently.`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
     setBusyId(user.id);
     setError(null);
     setMessage(null);
@@ -234,35 +394,102 @@ export function AdminPanel({
     router.refresh();
   }
 
+  async function createParticipant(name: string, mobile: string) {
+    setBusyId("add-participant");
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mobile }),
+    });
+
+    const payload = (await response.json()) as {
+      error?: string;
+      user?: AdminUserRow;
+    };
+
+    setBusyId(null);
+
+    if (!response.ok) {
+      setError(payload.error ?? "Could not add participant.");
+      return;
+    }
+
+    if (payload.user) {
+      setParticipantRows((rows) =>
+        [...rows, payload.user!].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setMessage(
+        `${payload.user.name} added. Default password: ${DEFAULT_PARTICIPANT_PASSWORD}`,
+      );
+    }
+
+    setAddParticipantOpen(false);
+    router.refresh();
+  }
+
+  async function resetParticipantPassword(user: AdminUserRow) {
+    setBusyId(user.id);
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch(
+      `/api/admin/users/${user.id}/reset-password`,
+      { method: "POST" },
+    );
+
+    const payload = (await response.json()) as {
+      error?: string;
+      user?: AdminUserRow;
+    };
+
+    setBusyId(null);
+
+    if (!response.ok) {
+      setError(payload.error ?? "Could not reset password.");
+      return;
+    }
+
+    if (payload.user) {
+      setParticipantRows((rows) =>
+        rows.map((row) => (row.id === payload.user!.id ? payload.user! : row)),
+      );
+      setMessage(`${payload.user.name}'s password was reset to ${DEFAULT_PARTICIPANT_PASSWORD}.`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-2 border-b border-black/10">
         <Tabs
           className="min-w-0 flex-1 gap-0"
-          onValueChange={(value) => {
-            setAdminTab(value as AdminTab);
-            setFiltersOpen(false);
-          }}
+          onValueChange={(value) => selectAdminTab(value as AdminTab)}
           value={adminTab}
         >
           <TabsList
-            className="h-auto w-full justify-start gap-0 overflow-x-auto border-0 bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="h-auto w-full justify-start gap-0 border-0 bg-transparent p-0 sm:gap-1"
             variant="line"
           >
-            <TabsTrigger className={adminTabTriggerClass} value="review">
-              Review{reviewCount > 0 ? ` (${reviewCount})` : ""}
-            </TabsTrigger>
-            <TabsTrigger className={adminTabTriggerClass} value="approved">
-              Approved{approvedCount > 0 ? ` (${approvedCount})` : ""}
-            </TabsTrigger>
-            <TabsTrigger className={adminTabTriggerClass} value="participants">
-              Participants
-            </TabsTrigger>
-            <TabsTrigger className={adminTabTriggerClass} value="scoring">
-              Scoring
-            </TabsTrigger>
+            {visibleTabs.map((tab) => (
+              <TabsTrigger className={adminTabTriggerClass} key={tab} value={tab}>
+                {getAdminTabLabel(tab, reviewCount, approvedCount)}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
+
+        {overflowTabs.length > 0 ? (
+          <AdminTabOverflowMenu
+            activeTab={adminTab}
+            getLabel={(tab) => getAdminTabLabel(tab, reviewCount, approvedCount)}
+            onOpenChange={setOverflowMenuOpen}
+            onSelect={selectAdminTab}
+            open={overflowMenuOpen}
+            tabs={overflowTabs}
+          />
+        ) : null}
 
         {isActivitiesTab ? (
           <button
@@ -354,10 +581,10 @@ export function AdminPanel({
           onApprove={(row) =>
             patchActivity(row.id, { status: "approved" }, "Activity approved")
           }
-          onEdit={(row, steps, activityDate) =>
+          onEdit={(row, steps, distanceKm, activityDate) =>
             patchActivity(
               row.id,
-              { steps: Number(steps), activityDate },
+              { steps: Number(steps), distanceKm, activityDate },
               "Activity updated",
             )
           }
@@ -366,9 +593,13 @@ export function AdminPanel({
         />
       ) : adminTab === "participants" ? (
         <ParticipantsTab
+          addOpen={addParticipantOpen}
           busyId={busyId}
           currentAdminId={currentAdminId}
+          onAddOpenChange={setAddParticipantOpen}
+          onCreate={createParticipant}
           onDelete={deleteParticipant}
+          onResetPassword={resetParticipantPassword}
           onToggleRole={toggleRole}
           users={participantRows}
         />
@@ -417,7 +648,7 @@ function ActivitiesTab({
   onPreviewPhoto: (url: string) => void;
   onApprove: (row: AdminActivityRow) => void;
   onDisapprove: (row: AdminActivityRow, note: string) => void;
-  onEdit: (row: AdminActivityRow, steps: string, activityDate: string) => void;
+  onEdit: (row: AdminActivityRow, steps: string, distanceKm: string, activityDate: string) => void;
   busyId: string | null;
 }) {
   return (
@@ -438,7 +669,9 @@ function ActivitiesTab({
             key={row.id}
             onApprove={() => onApprove(row)}
             onDisapprove={(note) => onDisapprove(row, note)}
-            onEdit={(steps, activityDate) => onEdit(row, steps, activityDate)}
+            onEdit={(steps, distanceKm, activityDate) =>
+              onEdit(row, steps, distanceKm, activityDate)
+            }
             onPreviewPhoto={() => onPreviewPhoto(photoProxyUrl(row.photoUrl))}
             reviewTab={reviewTab}
             row={row}
@@ -465,11 +698,12 @@ function ActivityAdminCard({
   onPreviewPhoto: () => void;
   onApprove: () => void;
   onDisapprove: (note: string) => void;
-  onEdit: (steps: string, activityDate: string) => void;
+  onEdit: (steps: string, distanceKm: string, activityDate: string) => void;
   busy: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [steps, setSteps] = useState(String(row.steps));
+  const [distanceKm, setDistanceKm] = useState(String(Number(row.distanceKm)));
   const [activityDate, setActivityDate] = useState(row.activityDate);
   const [note, setNote] = useState(row.adminNote ?? "");
 
@@ -503,7 +737,8 @@ function ActivityAdminCard({
             {formatDisplayDate(row.activityDate)} · target{" "}
             {row.targetSteps.toLocaleString("en-IN")} ·{" "}
             <span className="font-medium text-foreground">
-              {row.steps.toLocaleString("en-IN")} steps
+              {row.steps.toLocaleString("en-IN")} steps ·{" "}
+              {formatDistanceKm(row.distanceKm)}
             </span>
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -530,6 +765,16 @@ function ActivityAdminCard({
             />
           </label>
           <label className="block space-y-1 text-sm">
+            <span className="font-medium text-foreground">Distance (km)</span>
+            <input
+              className="field-input"
+              onChange={(event) => setDistanceKm(event.target.value)}
+              step={0.001}
+              type="number"
+              value={distanceKm}
+            />
+          </label>
+          <label className="block space-y-1 text-sm sm:col-span-2">
             <span className="font-medium text-foreground">Date</span>
             <select
               className="field-input"
@@ -547,7 +792,7 @@ function ActivityAdminCard({
             <ActionButton
               disabled={busy}
               onClick={() => {
-                onEdit(steps, activityDate);
+                onEdit(steps, distanceKm, activityDate);
                 setEditing(false);
               }}
               variant="primary"
@@ -594,59 +839,382 @@ function ActivityAdminCard({
 function ParticipantsTab({
   users,
   currentAdminId,
+  addOpen,
+  onAddOpenChange,
+  onCreate,
   onToggleRole,
+  onResetPassword,
   onDelete,
   busyId,
 }: {
   users: AdminUserRow[];
   currentAdminId: string;
+  addOpen: boolean;
+  onAddOpenChange: (open: boolean) => void;
+  onCreate: (name: string, mobile: string) => void;
   onToggleRole: (user: AdminUserRow) => void;
+  onResetPassword: (user: AdminUserRow) => void;
   onDelete: (user: AdminUserRow) => void;
   busyId: string | null;
 }) {
-  if (users.length === 0) {
-    return <EmptyCard text="No participants yet." />;
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ParticipantConfirmAction | null>(
+    null,
+  );
+
+  function handleCreate() {
+    setFormError(null);
+    if (name.trim().length < 2) {
+      setFormError("Enter the participant's name.");
+      return;
+    }
+    if (mobile.replace(/\D/g, "").length < 10) {
+      setFormError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    onCreate(name.trim(), mobile);
+    setName("");
+    setMobile("");
+  }
+
+  function handleConfirmAction() {
+    if (!confirmAction) {
+      return;
+    }
+
+    const { type, user } = confirmAction;
+    setConfirmAction(null);
+
+    if (type === "reset") {
+      onResetPassword(user);
+      return;
+    }
+    if (type === "role") {
+      onToggleRole(user);
+      return;
+    }
+    onDelete(user);
+  }
+
+  const confirmCopy = confirmAction
+    ? getParticipantConfirmCopy(confirmAction)
+    : null;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex justify-end">
+        <ActionButton onClick={() => onAddOpenChange(true)} variant="primary">
+          Add participant
+        </ActionButton>
+      </div>
+
+      <BottomFilterDrawer
+        onClose={() => {
+          onAddOpenChange(false);
+          setFormError(null);
+        }}
+        open={addOpen}
+        title="Add participant"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Default password is{" "}
+            <span className="font-medium text-foreground">
+              {DEFAULT_PARTICIPANT_PASSWORD}
+            </span>
+            . They must set a new password on first login.
+          </p>
+
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-foreground">Name</span>
+            <input
+              className="field-input"
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Full name"
+              value={name}
+            />
+          </label>
+
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-foreground">Mobile</span>
+            <input
+              className="field-input"
+              inputMode="numeric"
+              onChange={(event) => setMobile(event.target.value)}
+              placeholder="10-digit mobile number"
+              type="tel"
+              value={mobile}
+            />
+          </label>
+
+          {formError ? (
+            <p className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
+              {formError}
+            </p>
+          ) : null}
+
+          <div className="flex gap-2 pt-1">
+            <ActionButton
+              onClick={() => {
+                onAddOpenChange(false);
+                setFormError(null);
+              }}
+              variant="ghost"
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              disabled={busyId === "add-participant"}
+              onClick={handleCreate}
+              variant="primary"
+            >
+              Add participant
+            </ActionButton>
+          </div>
+        </div>
+      </BottomFilterDrawer>
+
+      <ConfirmDialog
+        busy={Boolean(confirmAction && busyId === confirmAction.user.id)}
+        confirmLabel={confirmCopy?.confirmLabel ?? "Confirm"}
+        description={confirmCopy?.description ?? ""}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+        open={Boolean(confirmAction)}
+        title={confirmCopy?.title ?? ""}
+        variant={confirmCopy?.variant ?? "default"}
+      />
+
+      {users.length === 0 ? (
+        <EmptyCard text="No participants yet." />
+      ) : (
+        users.map((user) => (
+          <article
+            className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-surface px-4 py-3"
+            key={user.id}
+          >
+            <div>
+              <p className="font-medium text-foreground">
+                {user.name}
+                {user.id === currentAdminId ? (
+                  <span className="ml-2 text-sm text-brand">You</span>
+                ) : null}
+              </p>
+              <p className="text-sm text-muted">
+                {user.mobile} · {user.role === "admin" ? "Admin" : "Participant"}
+              </p>
+              {user.mustChangePassword ? (
+                <p className="mt-1 text-xs font-medium text-warning">
+                  Must change password on login
+                </p>
+              ) : null}
+            </div>
+            {user.id !== currentAdminId ? (
+              <ParticipantActionsMenu
+                busy={busyId === user.id}
+                onSelectAction={(type) => setConfirmAction({ type, user })}
+                user={user}
+              />
+            ) : null}
+          </article>
+        ))
+      )}
+    </section>
+  );
+}
+
+type ParticipantConfirmAction = {
+  type: "reset" | "role" | "delete";
+  user: AdminUserRow;
+};
+
+function getParticipantConfirmCopy(action: ParticipantConfirmAction) {
+  const { type, user } = action;
+
+  if (type === "reset") {
+    return {
+      title: "Reset password?",
+      description: `Reset ${user.name}'s password to "${DEFAULT_PARTICIPANT_PASSWORD}". They must choose a new password on next login.`,
+      confirmLabel: "Reset password",
+      variant: "default" as const,
+    };
+  }
+
+  if (type === "role") {
+    const makingAdmin = user.role !== "admin";
+    return {
+      title: makingAdmin ? "Make admin?" : "Make participant?",
+      description: makingAdmin
+        ? `${user.name} will be able to access admin tools including activity review.`
+        : `${user.name} will lose admin access and remain a participant only.`,
+      confirmLabel: makingAdmin ? "Make admin" : "Make participant",
+      variant: "default" as const,
+    };
+  }
+
+  return {
+    title: "Delete participant?",
+    description: `Delete ${user.name}? This removes all their activities, photos, and profile data permanently.`,
+    confirmLabel: "Delete participant",
+    variant: "danger" as const,
+  };
+}
+
+function ParticipantActionsMenu({
+  user,
+  busy,
+  onSelectAction,
+}: {
+  user: AdminUserRow;
+  busy: boolean;
+  onSelectAction: (type: ParticipantConfirmAction["type"]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Actions for ${user.name}`}
+        className="inline-flex size-9 items-center justify-center rounded-xl text-muted transition hover:bg-brand/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50"
+        disabled={busy}
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <MoreVerticalIcon className="size-5" />
+      </button>
+
+      {open ? (
+        <>
+          <button
+            aria-label="Close menu"
+            className="fixed inset-0 z-20"
+            onClick={() => setOpen(false)}
+            type="button"
+          />
+          <div
+            className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] overflow-hidden rounded-xl border border-black/10 bg-surface py-1 shadow-lg ring-1 ring-black/5"
+            role="menu"
+          >
+            <ParticipantMenuItem
+              label="Reset password"
+              onSelect={() => {
+                setOpen(false);
+                onSelectAction("reset");
+              }}
+            />
+            <ParticipantMenuItem
+              label={user.role === "admin" ? "Make participant" : "Make admin"}
+              onSelect={() => {
+                setOpen(false);
+                onSelectAction("role");
+              }}
+            />
+            <ParticipantMenuItem
+              destructive
+              label="Delete"
+              onSelect={() => {
+                setOpen(false);
+                onSelectAction("delete");
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function ParticipantMenuItem({
+  label,
+  onSelect,
+  destructive = false,
+}: {
+  label: string;
+  onSelect: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        "block w-full px-4 py-2.5 text-left text-sm transition hover:bg-brand/5",
+        destructive ? "text-danger" : "text-foreground",
+      )}
+      onClick={onSelect}
+      role="menuitem"
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  variant,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  variant: "default" | "danger";
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) {
+    return null;
   }
 
   return (
-    <section className="space-y-2">
-      {users.map((user) => (
-        <article
-          className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-surface px-4 py-3"
-          key={user.id}
-        >
-          <div>
-            <p className="font-medium text-foreground">
-              {user.name}
-              {user.id === currentAdminId ? (
-                <span className="ml-2 text-sm text-brand">You</span>
-              ) : null}
-            </p>
-            <p className="text-sm text-muted">
-              {user.mobile} · {user.role === "admin" ? "Admin" : "Participant"}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ActionButton
-              disabled={busyId === user.id}
-              onClick={() => onToggleRole(user)}
-              variant={user.role === "admin" ? "ghost" : "primary"}
-            >
-              {user.role === "admin" ? "Make participant" : "Make admin"}
-            </ActionButton>
-            {user.id !== currentAdminId ? (
-              <ActionButton
-                disabled={busyId === user.id}
-                onClick={() => onDelete(user)}
-                variant="danger"
-              >
-                Delete
-              </ActionButton>
-            ) : null}
-          </div>
-        </article>
-      ))}
-    </section>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        aria-label="Close dialog"
+        className="absolute inset-0 bg-black/40"
+        onClick={onCancel}
+        type="button"
+      />
+      <div
+        aria-modal="true"
+        className="relative z-10 w-full max-w-sm rounded-3xl border border-black/10 bg-surface p-5 shadow-lg ring-1 ring-black/5"
+        role="alertdialog"
+      >
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <p className="mt-2 text-sm text-muted">{description}</p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <ActionButton disabled={busy} onClick={onCancel} variant="ghost">
+            Cancel
+          </ActionButton>
+          <ActionButton disabled={busy} onClick={onConfirm} variant={variant}>
+            {busy ? "Working…" : confirmLabel}
+          </ActionButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MoreVerticalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="5" r="1.75" />
+      <circle cx="12" cy="12" r="1.75" />
+      <circle cx="12" cy="19" r="1.75" />
+    </svg>
   );
 }
 
@@ -876,14 +1444,15 @@ function ActionButton({
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  variant: "primary" | "ghost" | "danger";
+  variant: "primary" | "ghost" | "danger" | "default";
 }) {
   return (
     <button
       className={cn(
         "rounded-xl px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-60",
         variant === "primary" && "bg-brand text-white hover:bg-brand-dark",
-        variant === "ghost" && "bg-background text-foreground hover:bg-brand/10",
+        (variant === "ghost" || variant === "default") &&
+          "bg-background text-foreground hover:bg-brand/10",
         variant === "danger" && "bg-danger text-white hover:opacity-90",
       )}
       disabled={disabled}

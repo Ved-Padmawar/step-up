@@ -1,8 +1,10 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   index,
   integer,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -16,6 +18,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   mobile: varchar("mobile", { length: 15 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   role: text("role").notNull().default("user"),
   profileImageUrl: text("profile_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -58,6 +61,9 @@ export const activities = pgTable(
       .notNull()
       .references(() => challengeDay.date),
     steps: integer("steps").notNull(),
+    distanceKm: numeric("distance_km", { precision: 7, scale: 3 })
+      .notNull()
+      .default("0.000"),
     photoUrl: text("photo_url").notNull(),
     status: text("status").notNull().default("pending"),
     basePoints: integer("base_points").notNull().default(0),

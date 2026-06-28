@@ -23,6 +23,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     status?: "approved" | "disapproved";
     adminNote?: string | null;
     steps?: number;
+    distanceKm?: string | number;
     activityDate?: string;
   };
 

@@ -8,15 +8,13 @@ import {
 } from "@/db/schema";
 import {
   ActivityError,
-  getChallengeWindow,
 } from "@/lib/activities-service";
-import {
-  isDateWithinRange,
-  isFutureDate,
-} from "@/lib/dates";
+import { distanceKmToStorage, parseDistanceKm } from "@/lib/distance";
+import { DEFAULT_PARTICIPANT_PASSWORD } from "@/lib/default-password";
 import { computeBasePoints } from "@/lib/scoring";
 import { deleteUserAndData } from "@/lib/user-service";
-import { appConfig } from "@/config";
+import { normalizeMobile, validateIndianMobile } from "@/lib/mobile";
+import { hashPassword } from "@/lib/password";
 
 export type AdminActivityRow = {
   id: string;
@@ -25,6 +23,7 @@ export type AdminActivityRow = {
   userMobile: string;
   activityDate: string;
   steps: number;
+  distanceKm: string;
   basePoints: number;
   status: string;
   adminNote: string | null;
@@ -40,6 +39,7 @@ export type AdminUserRow = {
   name: string;
   mobile: string;
   role: string;
+  mustChangePassword: boolean;
   createdAt: Date;
 };
 
@@ -69,6 +69,7 @@ export async function listAdminActivities(filters?: {
       userMobile: users.mobile,
       activityDate: activities.activityDate,
       steps: activities.steps,
+      distanceKm: activities.distanceKm,
       basePoints: activities.basePoints,
       status: activities.status,
       adminNote: activities.adminNote,
@@ -96,6 +97,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      mustChangePassword: users.mustChangePassword,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -109,11 +111,11 @@ export async function updateAdminActivity(
     status?: "approved" | "disapproved";
     adminNote?: string | null;
     steps?: number;
+    distanceKm?: string | number;
     activityDate?: string;
   },
 ) {
   const db = getDb();
-  const { config } = await getChallengeWindow();
 
   const [existing] = await db
     .select({
@@ -121,6 +123,7 @@ export async function updateAdminActivity(
       userId: activities.userId,
       activityDate: activities.activityDate,
       steps: activities.steps,
+      distanceKm: activities.distanceKm,
       basePoints: activities.basePoints,
       status: activities.status,
     })
@@ -134,9 +137,25 @@ export async function updateAdminActivity(
 
   const nextDate = input.activityDate ?? existing.activityDate;
   const nextSteps = input.steps ?? existing.steps;
+  let nextDistanceKm = existing.distanceKm;
+
+  if (input.distanceKm !== undefined) {
+    try {
+      nextDistanceKm = distanceKmToStorage(parseDistanceKm(input.distanceKm));
+    } catch (error) {
+      throw new ActivityError(
+        error instanceof Error ? error.message : "Invalid distance.",
+        400,
+      );
+    }
+  }
 
   if (!Number.isInteger(nextSteps) || nextSteps < 0) {
     throw new ActivityError("Steps must be a whole number ≥ 0.", 400);
+  }
+
+  if (Number(nextDistanceKm) < 0) {
+    throw new ActivityError("Distance cannot be negative.", 400);
   }
 
   const [day] = await db
@@ -151,14 +170,6 @@ export async function updateAdminActivity(
 
   if (!day) {
     throw new ActivityError("Invalid challenge date.", 400);
-  }
-
-  if (!isDateWithinRange(nextDate, config.startDate, config.endDate)) {
-    throw new ActivityError("Date is outside the challenge window.", 400);
-  }
-
-  if (isFutureDate(nextDate, appConfig.timezone)) {
-    throw new ActivityError("Future dates are not allowed.", 400);
   }
 
   if (nextDate !== existing.activityDate) {
@@ -194,6 +205,7 @@ export async function updateAdminActivity(
   const updates: {
     activityDate: string;
     steps: number;
+    distanceKm: string;
     basePoints: number;
     status: string;
     editedBy: string;
@@ -202,6 +214,7 @@ export async function updateAdminActivity(
   } = {
     activityDate: nextDate,
     steps: nextSteps,
+    distanceKm: nextDistanceKm,
     basePoints: nextBasePoints,
     status: nextStatus,
     editedBy: adminUserId,
@@ -254,6 +267,93 @@ export async function updateAdminUserRole(
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      mustChangePassword: users.mustChangePassword,
+    });
+
+  if (!updated) {
+    throw new ActivityError("User not found.", 404);
+  }
+
+  return updated;
+}
+
+function validateParticipantName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 60) {
+    throw new ActivityError("Name must be 2–60 characters.", 400);
+  }
+  return trimmed;
+}
+
+export async function createAdminParticipant(input: {
+  name: string;
+  mobile: string;
+}) {
+  const name = validateParticipantName(input.name);
+  const mobile = normalizeMobile(input.mobile);
+
+  if (!validateIndianMobile(mobile)) {
+    throw new ActivityError("Enter a valid 10-digit Indian mobile number.", 400);
+  }
+
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.mobile, mobile))
+    .limit(1);
+
+  if (existing) {
+    throw new ActivityError("This mobile number is already registered.", 409);
+  }
+
+  const passwordHash = await hashPassword(DEFAULT_PARTICIPANT_PASSWORD);
+
+  const [created] = await db
+    .insert(users)
+    .values({
+      name,
+      mobile,
+      passwordHash,
+      role: "user",
+      mustChangePassword: true,
+    })
+    .returning({
+      id: users.id,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+      mustChangePassword: users.mustChangePassword,
+      createdAt: users.createdAt,
+    });
+
+  return created;
+}
+
+export async function resetAdminUserPassword(
+  userId: string,
+  actingAdminId: string,
+) {
+  if (userId === actingAdminId) {
+    throw new ActivityError("You cannot reset your own password here.", 400);
+  }
+
+  const db = getDb();
+  const passwordHash = await hashPassword(DEFAULT_PARTICIPANT_PASSWORD);
+
+  const [updated] = await db
+    .update(users)
+    .set({
+      passwordHash,
+      mustChangePassword: true,
+    })
+    .where(eq(users.id, userId))
+    .returning({
+      id: users.id,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+      mustChangePassword: users.mustChangePassword,
     });
 
   if (!updated) {

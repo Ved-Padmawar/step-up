@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const activityDate = String(formData.get("date") ?? "");
     const steps = Number(formData.get("steps"));
+    const distanceKm = String(formData.get("distanceKm") ?? "");
     const photo = formData.get("photo");
 
     if (!(photo instanceof File)) {
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       userId: session.user.id,
       activityDate,
       steps,
+      distanceKm,
       photo,
     });
 
