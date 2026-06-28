@@ -4,7 +4,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import type { AdminScoringResult } from "@/lib/scoring-admin-service";
+import type {
+  AdminScoringResult,
+  DayScoringRunRecord,
+  WeekScoringRunRecord,
+} from "@/lib/scoring-admin-service";
 import type {
   AdminActivityRow,
   AdminUserRow,
@@ -164,8 +168,25 @@ export function AdminPanel({
   const [activities, setActivities] = useState(initialActivities);
   const [participantRows, setParticipantRows] = useState(users);
   const [scoring, setScoring] = useState(initialScoring);
-  const [scoringDateInput, setScoringDateInput] = useState(
-    initialScoring.state.scoringAsOfDate ?? initialScoring.state.effectiveDate,
+  const endedChallengeDays = useMemo(
+    () =>
+      challengeDays.filter((day) => day.date < initialScoring.calendarToday),
+    [challengeDays, initialScoring.calendarToday],
+  );
+  const weekOptions = useMemo(() => {
+    const weekNos = [...new Set(challengeDays.map((day) => day.weekNo))].sort(
+      (a, b) => a - b,
+    );
+    return weekNos;
+  }, [challengeDays]);
+  const [scoreDayInput, setScoreDayInput] = useState(
+    () =>
+      endedChallengeDays.at(-1)?.date ??
+      challengeDays.at(-1)?.date ??
+      initialScoring.calendarToday,
+  );
+  const [scoreWeekInput, setScoreWeekInput] = useState(
+    () => weekOptions.at(-1) ?? 1,
   );
   const [scoringBusy, setScoringBusy] = useState(false);
   const [userFilter, setUserFilter] = useState("");
@@ -343,33 +364,73 @@ export function AdminPanel({
     router.refresh();
   }
 
-  async function runScoring(body: Record<string, unknown>, successMessage: string) {
+  async function refreshScoringSnapshot() {
+    const response = await fetch("/api/admin/scoring");
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AdminScoringResult;
+  }
+
+  async function scoreDay(date: string) {
     setScoringBusy(true);
     setError(null);
     setMessage(null);
 
-    const response = await fetch("/api/admin/scoring/recompute", {
+    const response = await fetch("/api/admin/scoring/day", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ date }),
     });
 
-    const payload = (await response.json()) as AdminScoringResult & {
+    const payload = (await response.json()) as {
       error?: string;
+      run?: DayScoringRunRecord;
     };
 
     setScoringBusy(false);
 
     if (!response.ok) {
-      setError(payload.error ?? "Scoring run failed.");
+      setError(payload.error ?? "Day scoring failed.");
       return;
     }
 
-    setScoring(payload);
-    setScoringDateInput(
-      payload.state.scoringAsOfDate ?? payload.state.effectiveDate,
-    );
-    setMessage(successMessage);
+    const snapshot = await refreshScoringSnapshot();
+    if (snapshot) {
+      setScoring(snapshot);
+    }
+    setMessage(`Day ${formatDisplayDate(date)} scored and logged.`);
+    router.refresh();
+  }
+
+  async function scoreWeek(weekNo: number) {
+    setScoringBusy(true);
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch("/api/admin/scoring/week", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekNo }),
+    });
+
+    const payload = (await response.json()) as {
+      error?: string;
+      run?: WeekScoringRunRecord;
+    };
+
+    setScoringBusy(false);
+
+    if (!response.ok) {
+      setError(payload.error ?? "Week scoring failed.");
+      return;
+    }
+
+    const snapshot = await refreshScoringSnapshot();
+    if (snapshot) {
+      setScoring(snapshot);
+    }
+    setMessage(`Week ${weekNo} scored and logged.`);
     router.refresh();
   }
 
@@ -585,22 +646,15 @@ export function AdminPanel({
       ) : (
         <ScoringTab
           busy={scoringBusy}
-          dateInput={scoringDateInput}
-          onAdvanceDay={() =>
-            runScoring({ advanceDays: 1 }, "Scoring advanced by one day.")
-          }
-          onClearOverride={() =>
-            runScoring({ asOfDate: null }, "Scoring reset to calendar today.")
-          }
-          onRecompute={() => runScoring({}, "Scores recomputed.")}
-          onSetDate={() =>
-            runScoring(
-              { asOfDate: scoringDateInput },
-              `Scoring date set to ${formatDisplayDate(scoringDateInput)}.`,
-            )
-          }
-          onDateInputChange={setScoringDateInput}
+          challengeDays={challengeDays}
+          onScoreDay={() => scoreDay(scoreDayInput)}
+          onScoreWeek={() => scoreWeek(scoreWeekInput)}
+          scoreDayInput={scoreDayInput}
+          scoreWeekInput={scoreWeekInput}
+          onScoreDayInputChange={setScoreDayInput}
+          onScoreWeekInputChange={setScoreWeekInput}
           scoring={scoring}
+          weekOptions={weekOptions}
         />
       )}
 
@@ -1199,84 +1253,39 @@ function MoreVerticalIcon({ className }: { className?: string }) {
 
 function ScoringTab({
   scoring,
-  dateInput,
+  challengeDays,
+  weekOptions,
+  scoreDayInput,
+  scoreWeekInput,
   busy,
-  onDateInputChange,
-  onRecompute,
-  onSetDate,
-  onClearOverride,
-  onAdvanceDay,
+  onScoreDayInputChange,
+  onScoreWeekInputChange,
+  onScoreDay,
+  onScoreWeek,
 }: {
   scoring: AdminScoringResult;
-  dateInput: string;
+  challengeDays: ChallengeDayOption[];
+  weekOptions: number[];
+  scoreDayInput: string;
+  scoreWeekInput: number;
   busy: boolean;
-  onDateInputChange: (value: string) => void;
-  onRecompute: () => void;
-  onSetDate: () => void;
-  onClearOverride: () => void;
-  onAdvanceDay: () => void;
+  onScoreDayInputChange: (value: string) => void;
+  onScoreWeekInputChange: (value: number) => void;
+  onScoreDay: () => void;
+  onScoreWeek: () => void;
 }) {
-  const { state, standings, computedAt } = scoring;
+  const { calendarToday, standings, recentDayRuns, recentWeekRuns } = scoring;
 
   return (
     <section className="space-y-4">
       <article className="rounded-3xl border border-black/5 bg-surface p-5">
-        <h2 className="text-lg font-semibold text-foreground">Scoring clock</h2>
+        <h2 className="text-lg font-semibold text-foreground">Live standings</h2>
         <p className="mt-2 text-sm text-muted">
-          Star-of-day and week bonuses only apply after the scoring date passes each
-          day or week. Use an override to test without waiting for real calendar time.
+          Totals are derived from approved activities using calendar today (
+          {formatDisplayDate(calendarToday)}). Bonus rules apply only to ended
+          days and weeks.
         </p>
 
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-          <div className="rounded-2xl bg-background px-4 py-3">
-            <dt className="text-muted">Calendar today (IST)</dt>
-            <dd className="mt-1 font-semibold text-foreground">
-              {formatDisplayDate(state.calendarToday)}
-            </dd>
-          </div>
-          <div className="rounded-2xl bg-background px-4 py-3">
-            <dt className="text-muted">Effective scoring date</dt>
-            <dd className="mt-1 font-semibold text-foreground">
-              {formatDisplayDate(state.effectiveDate)}
-              {state.usingOverride ? (
-                <span className="ml-2 text-xs font-medium text-brand">override</span>
-              ) : null}
-            </dd>
-          </div>
-        </dl>
-
-        <label className="mt-4 block space-y-1 text-sm">
-          <span className="font-medium text-foreground">Scoring as-of date</span>
-          <input
-            className="field-input"
-            onChange={(event) => onDateInputChange(event.target.value)}
-            type="date"
-            value={dateInput}
-          />
-        </label>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <ActionButton disabled={busy} onClick={onRecompute} variant="primary">
-            Recompute scores
-          </ActionButton>
-          <ActionButton disabled={busy} onClick={onSetDate} variant="ghost">
-            Set date & recompute
-          </ActionButton>
-          <ActionButton disabled={busy} onClick={onAdvanceDay} variant="ghost">
-            Advance 1 day
-          </ActionButton>
-          <ActionButton disabled={busy} onClick={onClearOverride} variant="ghost">
-            Use calendar today
-          </ActionButton>
-        </div>
-
-        <p className="mt-3 text-xs text-muted">
-          Last computed {new Date(computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST
-        </p>
-      </article>
-
-      <article className="rounded-3xl border border-black/5 bg-surface p-5">
-        <h2 className="text-lg font-semibold text-foreground">Current standings</h2>
         {standings.length === 0 ? (
           <p className="mt-3 text-sm text-muted">No participants yet.</p>
         ) : (
@@ -1287,7 +1296,145 @@ function ScoringTab({
           </div>
         )}
       </article>
+
+      <article className="rounded-3xl border border-black/5 bg-surface p-5">
+        <h2 className="text-lg font-semibold text-foreground">Score a day</h2>
+        <p className="mt-2 text-sm text-muted">
+          Records star-of-day winners for review. Re-running recalculates from
+          current approved data and appends a new audit entry.
+        </p>
+
+        <label className="mt-4 block space-y-1 text-sm">
+          <span className="font-medium text-foreground">Challenge day</span>
+          <select
+            className="field-input"
+            onChange={(event) => onScoreDayInputChange(event.target.value)}
+            value={scoreDayInput}
+          >
+            {challengeDays.map((day) => (
+              <option key={day.date} value={day.date}>
+                {formatDisplayDate(day.date)} · Week {day.weekNo}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-4">
+          <ActionButton disabled={busy} onClick={onScoreDay} variant="primary">
+            Score day
+          </ActionButton>
+        </div>
+      </article>
+
+      <article className="rounded-3xl border border-black/5 bg-surface p-5">
+        <h2 className="text-lg font-semibold text-foreground">Score a week</h2>
+        <p className="mt-2 text-sm text-muted">
+          Records week star and consistency bonuses for review. Re-running
+          recalculates from current approved data.
+        </p>
+
+        <label className="mt-4 block space-y-1 text-sm">
+          <span className="font-medium text-foreground">Challenge week</span>
+          <select
+            className="field-input"
+            onChange={(event) =>
+              onScoreWeekInputChange(Number(event.target.value))
+            }
+            value={scoreWeekInput}
+          >
+            {weekOptions.map((weekNo) => (
+              <option key={weekNo} value={weekNo}>
+                Week {weekNo}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-4">
+          <ActionButton disabled={busy} onClick={onScoreWeek} variant="primary">
+            Score week
+          </ActionButton>
+        </div>
+      </article>
+
+      <article className="rounded-3xl border border-black/5 bg-surface p-5">
+        <h2 className="text-lg font-semibold text-foreground">Recent audit runs</h2>
+        {recentDayRuns.length === 0 && recentWeekRuns.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">No scoring runs yet.</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {recentDayRuns.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Day runs</h3>
+                <ul className="mt-2 space-y-2">
+                  {recentDayRuns.map((run) => (
+                    <DayScoringRunSummary key={run.id} run={run} />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {recentWeekRuns.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Week runs</h3>
+                <ul className="mt-2 space-y-2">
+                  {recentWeekRuns.map((run) => (
+                    <WeekScoringRunSummary key={run.id} run={run} />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </article>
     </section>
+  );
+}
+
+function DayScoringRunSummary({ run }: { run: DayScoringRunRecord }) {
+  return (
+    <li className="rounded-2xl bg-background px-4 py-3 text-sm">
+      <p className="font-medium text-foreground">
+        {formatDisplayDate(run.activityDate)} · max {run.maxSteps.toLocaleString()} steps
+      </p>
+      <p className="mt-1 text-muted">
+        {new Date(run.computedAt).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+        })}{" "}
+        IST
+        {run.triggeredByName ? ` · by ${run.triggeredByName}` : ""}
+      </p>
+      {run.winners.length > 0 ? (
+        <p className="mt-1 text-foreground">
+          Star winners (+{run.starPoints}): {run.winners.join(", ")}
+        </p>
+      ) : (
+        <p className="mt-1 text-muted">No star winner (no steps recorded).</p>
+      )}
+    </li>
+  );
+}
+
+function WeekScoringRunSummary({ run }: { run: WeekScoringRunRecord }) {
+  return (
+    <li className="rounded-2xl bg-background px-4 py-3 text-sm">
+      <p className="font-medium text-foreground">
+        Week {run.weekNo} · max {run.maxWeeklySteps.toLocaleString()} steps
+      </p>
+      <p className="mt-1 text-muted">
+        {new Date(run.computedAt).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+        })}{" "}
+        IST
+        {run.triggeredByName ? ` · by ${run.triggeredByName}` : ""}
+      </p>
+      {run.winners.length > 0 ? (
+        <p className="mt-1 text-foreground">
+          Week star (+{run.weekStarPoints}): {run.winners.join(", ")}
+        </p>
+      ) : (
+        <p className="mt-1 text-muted">No week star (no steps recorded).</p>
+      )}
+    </li>
   );
 }
 

@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -43,7 +44,7 @@ export const challengeConfig = pgTable("challenge_config", {
   consistency7: integer("consistency_7").notNull().default(35),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
-  /** When set, bonus scoring treats the challenge as if this IST date has passed. */
+  /** Deprecated: live scoring uses calendar today. Kept for existing DB rows. */
   scoringAsOfDate: date("scoring_as_of_date"),
 });
 
@@ -83,6 +84,76 @@ export const activities = pgTable(
     index("activity_activity_date_idx").on(table.activityDate),
     index("activity_user_id_idx").on(table.userId),
   ],
+);
+
+export const dayScoringRun = pgTable(
+  "day_scoring_run",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    activityDate: date("activity_date")
+      .notNull()
+      .references(() => challengeDay.date),
+    triggeredBy: uuid("triggered_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    computedAt: timestamp("computed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    starPoints: integer("star_points").notNull(),
+    maxSteps: integer("max_steps").notNull(),
+  },
+  (table) => [index("day_scoring_run_activity_date_idx").on(table.activityDate)],
+);
+
+export const dayScoringRunEntry = pgTable(
+  "day_scoring_run_entry",
+  {
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => dayScoringRun.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    steps: integer("steps").notNull(),
+    basePoints: integer("base_points").notNull(),
+    isStarWinner: boolean("is_star_winner").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.userId] })],
+);
+
+export const weekScoringRun = pgTable(
+  "week_scoring_run",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    weekNo: integer("week_no").notNull(),
+    triggeredBy: uuid("triggered_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    computedAt: timestamp("computed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    weekStarPoints: integer("week_star_points").notNull(),
+    maxWeeklySteps: integer("max_weekly_steps").notNull(),
+  },
+  (table) => [index("week_scoring_run_week_no_idx").on(table.weekNo)],
+);
+
+export const weekScoringRunEntry = pgTable(
+  "week_scoring_run_entry",
+  {
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => weekScoringRun.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weeklySteps: integer("weekly_steps").notNull(),
+    weeklyBasePoints: integer("weekly_base_points").notNull(),
+    daysMet: integer("days_met").notNull(),
+    consistencyPoints: integer("consistency_points").notNull(),
+    isWeekStar: boolean("is_week_star").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.userId] })],
 );
 
 export const usersRelations = relations(users, ({ many }) => ({
