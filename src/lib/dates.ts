@@ -65,7 +65,8 @@ export function isLoggableChallengeDate(
     return true;
   }
 
-  return !isFutureDate(date, options.timezone);
+  const timezone = options.timezone ?? IST_TIMEZONE;
+  return date === getTodayDateString(timezone);
 }
 
 export { IST_TIMEZONE };

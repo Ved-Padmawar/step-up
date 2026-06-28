@@ -328,9 +328,9 @@ export async function createActivity(input: {
 
   if (
     !appConfig.allowOpenChallengeLogging &&
-    isFutureDate(input.activityDate, appConfig.timezone)
+    input.activityDate !== getTodayDateString(appConfig.timezone)
   ) {
-    throw new ActivityError("Future dates cannot be logged.", 400);
+    throw new ActivityError("You can only log activity for today.", 400);
   }
 
   if (!Number.isInteger(input.steps) || input.steps <= 0) {

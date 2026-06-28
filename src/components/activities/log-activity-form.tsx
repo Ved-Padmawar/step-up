@@ -253,7 +253,7 @@ export function LogActivityForm({
             ? "You have already logged every available day. Each participant can log once per day — ask an admin to edit an entry if needed."
             : allowOpenChallengeLogging
               ? "No challenge days are available to log right now."
-              : `Logging opens on ${formatDisplayDate(challengeStartDate)}. Challenge days before today are not available yet.`}
+              : `You can only log activity for today. Logging opens on ${formatDisplayDate(challengeStartDate)} if the challenge has not started yet.`}
         </p>
       </section>
     );

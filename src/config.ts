@@ -12,8 +12,8 @@ export const appConfig = {
     password: "shriganesh007",
   },
   timezone: "Asia/Kolkata",
-  // true = log any unlogged day in the challenge window (for testing before 29 Jun)
-  allowOpenChallengeLogging: true,
+  // true = log any unlogged day in the challenge window; false = today only
+  allowOpenChallengeLogging: false,
   // Vercel Blob → Store → read-write token
   blobReadWriteToken: "vercel_blob_rw_hPNSbgSL2cjMbGcn_p30IE7XD1Qg5fFGnBfYiGITJL3fTFA",
 } as const;
