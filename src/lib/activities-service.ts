@@ -72,7 +72,7 @@ function buildWeekStats(
   }
 
   for (const day of loggedActivities) {
-    if (day.activity.status === "disapproved") {
+    if (day.activity.status !== "approved") {
       continue;
     }
 
@@ -392,7 +392,7 @@ export async function createActivity(input: {
       activityDate: input.activityDate,
       steps: input.steps,
       photoUrl: uploaded.url,
-      status: "approved",
+      status: "pending",
       basePoints,
     })
     .returning({

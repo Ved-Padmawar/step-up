@@ -44,7 +44,7 @@ export const challengeConfig = pgTable("challenge_config", {
   scoringAsOfDate: date("scoring_as_of_date"),
 });
 
-export const activityStatusEnum = ["approved", "disapproved"] as const;
+export const activityStatusEnum = ["pending", "approved", "disapproved"] as const;
 export type ActivityStatus = (typeof activityStatusEnum)[number];
 
 export const activities = pgTable(
@@ -59,7 +59,7 @@ export const activities = pgTable(
       .references(() => challengeDay.date),
     steps: integer("steps").notNull(),
     photoUrl: text("photo_url").notNull(),
-    status: text("status").notNull().default("approved"),
+    status: text("status").notNull().default("pending"),
     basePoints: integer("base_points").notNull().default(0),
     adminNote: text("admin_note"),
     editedBy: uuid("edited_by").references(() => users.id, {

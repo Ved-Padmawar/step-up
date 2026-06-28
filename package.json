@@ -20,9 +20,12 @@
     "test": "pnpm test:scoring && pnpm test:standings"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@neondatabase/serverless": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.15",
     "@vercel/blob": "^2.5.0",
     "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.9",

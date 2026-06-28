@@ -153,6 +153,8 @@ function ActivityLogRow({ day }: { day: LoggedActivityDay }) {
           </p>
           {day.state === "disapproved" ? (
             <p className="text-sm font-medium text-danger">Disapproved</p>
+          ) : activity.status === "pending" ? (
+            <p className="text-sm font-medium text-warning">Pending review</p>
           ) : (
             <p className="text-sm text-muted capitalize">{activity.status}</p>
           )}

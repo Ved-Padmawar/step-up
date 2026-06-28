@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { photoProxyUrl } from "@/lib/blob-storage";
 import { formatDisplayDate } from "@/lib/dates";
 import type { UserStanding } from "@/lib/standings";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ChallengeDayOption = {
   date: string;
@@ -28,7 +29,10 @@ type AdminPanelProps = {
   initialScoring: AdminScoringResult;
 };
 
-type Tab = "activities" | "participants" | "scoring";
+type AdminTab = "review" | "approved" | "participants" | "scoring";
+
+const adminTabTriggerClass =
+  "shrink-0 px-2 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground data-active:text-brand data-active:font-semibold after:bg-brand sm:px-3";
 
 export function AdminPanel({
   initialActivities,
@@ -38,7 +42,7 @@ export function AdminPanel({
   initialScoring,
 }: AdminPanelProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("activities");
+  const [adminTab, setAdminTab] = useState<AdminTab>("review");
   const [activities, setActivities] = useState(initialActivities);
   const [participantRows, setParticipantRows] = useState(users);
   const [scoring, setScoring] = useState(initialScoring);
@@ -48,26 +52,46 @@ export function AdminPanel({
   const [scoringBusy, setScoringBusy] = useState(false);
   const [userFilter, setUserFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const reviewCount = useMemo(
+    () =>
+      activities.filter(
+        (row) => row.status === "pending" || row.status === "disapproved",
+      ).length,
+    [activities],
+  );
+
+  const approvedCount = useMemo(
+    () => activities.filter((row) => row.status === "approved").length,
+    [activities],
+  );
+
+  const hasActiveFilters = Boolean(userFilter || dateFilter);
+  const isActivitiesTab = adminTab === "review" || adminTab === "approved";
+
   const filteredActivities = useMemo(() => {
     return activities.filter((row) => {
       if (userFilter && row.userId !== userFilter) return false;
       if (dateFilter && row.activityDate !== dateFilter) return false;
-      if (statusFilter && row.status !== statusFilter) return false;
-      return true;
+      if (adminTab === "review") {
+        return row.status === "pending" || row.status === "disapproved";
+      }
+      if (adminTab === "approved") {
+        return row.status === "approved";
+      }
+      return false;
     });
-  }, [activities, userFilter, dateFilter, statusFilter]);
+  }, [activities, userFilter, dateFilter, adminTab]);
 
   async function refreshActivities() {
     const params = new URLSearchParams();
     if (userFilter) params.set("userId", userFilter);
     if (dateFilter) params.set("date", dateFilter);
-    if (statusFilter) params.set("status", statusFilter);
 
     const response = await fetch(`/api/admin/activities?${params.toString()}`);
     if (response.ok) {
@@ -211,40 +235,115 @@ export function AdminPanel({
   }
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-sm">
-        <p className="text-sm uppercase tracking-[0.2em] text-white/80">Admin</p>
-        <h1 className="mt-2 text-3xl font-semibold">Moderation</h1>
-        <p className="mt-2 text-sm text-white/85">
-          Review proof photos, edit entries, and manage participants.
-        </p>
-      </header>
+    <div className="space-y-4">
+      <div className="flex items-end gap-2 border-b border-black/10">
+        <Tabs
+          className="min-w-0 flex-1 gap-0"
+          onValueChange={(value) => {
+            setAdminTab(value as AdminTab);
+            setFiltersOpen(false);
+          }}
+          value={adminTab}
+        >
+          <TabsList
+            className="h-auto w-full justify-start gap-0 overflow-x-auto border-0 bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            variant="line"
+          >
+            <TabsTrigger className={adminTabTriggerClass} value="review">
+              Review{reviewCount > 0 ? ` (${reviewCount})` : ""}
+            </TabsTrigger>
+            <TabsTrigger className={adminTabTriggerClass} value="approved">
+              Approved{approvedCount > 0 ? ` (${approvedCount})` : ""}
+            </TabsTrigger>
+            <TabsTrigger className={adminTabTriggerClass} value="participants">
+              Participants
+            </TabsTrigger>
+            <TabsTrigger className={adminTabTriggerClass} value="scoring">
+              Scoring
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      <div className="flex gap-2 rounded-2xl bg-surface p-1 shadow-sm ring-1 ring-black/5">
-        <TabButton active={tab === "activities"} onClick={() => setTab("activities")}>
-          Activities
-        </TabButton>
-        <TabButton active={tab === "participants"} onClick={() => setTab("participants")}>
-          Participants
-        </TabButton>
-        <TabButton active={tab === "scoring"} onClick={() => setTab("scoring")}>
-          Scoring
-        </TabButton>
+        {isActivitiesTab ? (
+          <button
+            aria-expanded={filtersOpen}
+            aria-label="Open activity filters"
+            className={cn(
+              "mb-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+              hasActiveFilters
+                ? "text-brand"
+                : "text-muted hover:bg-brand/5 hover:text-foreground",
+            )}
+            onClick={() => setFiltersOpen(true)}
+            type="button"
+          >
+            <FilterIcon className="size-4" />
+            Filter
+            {hasActiveFilters ? (
+              <span className="size-1.5 rounded-full bg-brand" />
+            ) : null}
+          </button>
+        ) : null}
       </div>
 
+      <BottomFilterDrawer
+        onClose={() => setFiltersOpen(false)}
+        open={filtersOpen && isActivitiesTab}
+        title="Filter activities"
+      >
+        <div className="space-y-4">
+          <FilterSelect
+            label="Participant"
+            onChange={setUserFilter}
+            value={userFilter}
+          >
+            <option value="">All participants</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Date" onChange={setDateFilter} value={dateFilter}>
+            <option value="">All dates</option>
+            {challengeDays.map((day) => (
+              <option key={day.date} value={day.date}>
+                {formatDisplayDate(day.date)}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <div className="flex gap-2 pt-1">
+            <ActionButton
+              onClick={() => {
+                setUserFilter("");
+                setDateFilter("");
+                setFiltersOpen(false);
+              }}
+              variant="ghost"
+            >
+              Clear
+            </ActionButton>
+            <ActionButton onClick={() => setFiltersOpen(false)} variant="primary">
+              Done
+            </ActionButton>
+          </div>
+        </div>
+      </BottomFilterDrawer>
+
       {message ? (
-        <p className="rounded-2xl bg-success/10 px-4 py-3 text-sm text-brand">{message}</p>
+        <p className="rounded-xl bg-success/10 px-3 py-2 text-sm text-brand">{message}</p>
       ) : null}
       {error ? (
-        <p className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+        <p className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
       ) : null}
 
-      {tab === "activities" ? (
+      {isActivitiesTab ? (
         <ActivitiesTab
           activities={filteredActivities}
           busyId={busyId}
           challengeDays={challengeDays}
-          dateFilter={dateFilter}
           onDisapprove={(row, note) =>
             patchActivity(
               row.id,
@@ -263,14 +362,9 @@ export function AdminPanel({
             )
           }
           onPreviewPhoto={setPhotoPreview}
-          setDateFilter={setDateFilter}
-          setStatusFilter={setStatusFilter}
-          setUserFilter={setUserFilter}
-          statusFilter={statusFilter}
-          userFilter={userFilter}
-          users={users}
+          reviewTab={adminTab === "review" ? "review" : "approved"}
         />
-      ) : tab === "participants" ? (
+      ) : adminTab === "participants" ? (
         <ParticipantsTab
           busyId={busyId}
           currentAdminId={currentAdminId}
@@ -307,39 +401,10 @@ export function AdminPanel({
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      className={cn(
-        "flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-        active ? "bg-brand text-white" : "text-muted hover:bg-brand/10 hover:text-brand",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {children}
-    </button>
-  );
-}
-
 function ActivitiesTab({
   activities,
-  users,
   challengeDays,
-  userFilter,
-  dateFilter,
-  statusFilter,
-  setUserFilter,
-  setDateFilter,
-  setStatusFilter,
+  reviewTab,
   onPreviewPhoto,
   onApprove,
   onDisapprove,
@@ -347,14 +412,8 @@ function ActivitiesTab({
   busyId,
 }: {
   activities: AdminActivityRow[];
-  users: AdminUserRow[];
   challengeDays: ChallengeDayOption[];
-  userFilter: string;
-  dateFilter: string;
-  statusFilter: string;
-  setUserFilter: (value: string) => void;
-  setDateFilter: (value: string) => void;
-  setStatusFilter: (value: string) => void;
+  reviewTab: "review" | "approved";
   onPreviewPhoto: (url: string) => void;
   onApprove: (row: AdminActivityRow) => void;
   onDisapprove: (row: AdminActivityRow, note: string) => void;
@@ -362,43 +421,15 @@ function ActivitiesTab({
   busyId: string | null;
 }) {
   return (
-    <section className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <FilterSelect
-          label="Participant"
-          onChange={setUserFilter}
-          value={userFilter}
-        >
-          <option value="">All</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </FilterSelect>
-
-        <FilterSelect label="Date" onChange={setDateFilter} value={dateFilter}>
-          <option value="">All</option>
-          {challengeDays.map((day) => (
-            <option key={day.date} value={day.date}>
-              {formatDisplayDate(day.date)}
-            </option>
-          ))}
-        </FilterSelect>
-
-        <FilterSelect
-          label="Status"
-          onChange={setStatusFilter}
-          value={statusFilter}
-        >
-          <option value="">All</option>
-          <option value="approved">Approved</option>
-          <option value="disapproved">Disapproved</option>
-        </FilterSelect>
-      </div>
-
+    <section className="space-y-3">
       {activities.length === 0 ? (
-        <EmptyCard text="No activities match these filters." />
+        <EmptyCard
+          text={
+            reviewTab === "review"
+              ? "No activities waiting for review."
+              : "No approved activities yet."
+          }
+        />
       ) : (
         activities.map((row) => (
           <ActivityAdminCard
@@ -409,6 +440,7 @@ function ActivitiesTab({
             onDisapprove={(note) => onDisapprove(row, note)}
             onEdit={(steps, activityDate) => onEdit(row, steps, activityDate)}
             onPreviewPhoto={() => onPreviewPhoto(photoProxyUrl(row.photoUrl))}
+            reviewTab={reviewTab}
             row={row}
           />
         ))
@@ -420,6 +452,7 @@ function ActivitiesTab({
 function ActivityAdminCard({
   row,
   challengeDays,
+  reviewTab,
   onPreviewPhoto,
   onApprove,
   onDisapprove,
@@ -428,6 +461,7 @@ function ActivityAdminCard({
 }: {
   row: AdminActivityRow;
   challengeDays: ChallengeDayOption[];
+  reviewTab: "review" | "approved";
   onPreviewPhoto: () => void;
   onApprove: () => void;
   onDisapprove: (note: string) => void;
@@ -440,7 +474,7 @@ function ActivityAdminCard({
   const [note, setNote] = useState(row.adminNote ?? "");
 
   return (
-    <article className="rounded-3xl border border-black/5 bg-surface p-4">
+    <article className="rounded-2xl border border-black/5 bg-surface p-3">
       <div className="flex gap-3">
         <button
           className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
@@ -530,7 +564,7 @@ function ActivityAdminCard({
           <ActionButton disabled={busy} onClick={() => setEditing(true)} variant="ghost">
             Edit
           </ActionButton>
-          {row.status === "approved" ? (
+          {reviewTab === "approved" ? (
             <>
               <input
                 className="field-input min-w-0 flex-1"
@@ -548,7 +582,7 @@ function ActivityAdminCard({
             </>
           ) : (
             <ActionButton disabled={busy} onClick={onApprove} variant="primary">
-              Approve
+              {row.status === "disapproved" ? "Re-approve" : "Approve"}
             </ActionButton>
           )}
         </div>
@@ -731,6 +765,68 @@ function ScoringStandingRow({ row }: { row: UserStanding }) {
   );
 }
 
+function BottomFilterDrawer({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-40">
+      <button
+        aria-label="Close filters"
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        type="button"
+      />
+      <div
+        aria-modal="true"
+        className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl rounded-t-3xl bg-surface px-4 pb-8 pt-3 shadow-[0_-8px_30px_rgb(0_0_0/0.12)] ring-1 ring-black/5"
+        role="dialog"
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/10" />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <button
+            className="rounded-lg px-2 py-1 text-sm font-medium text-muted hover:bg-brand/5 hover:text-foreground"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
+  );
+}
+
 function FilterSelect({
   label,
   value,
@@ -761,12 +857,12 @@ function StatusBadge({ status }: { status: string }) {
     <span
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold capitalize",
-        status === "approved"
-          ? "bg-success/10 text-brand"
-          : "bg-danger/10 text-danger",
+        status === "approved" && "bg-success/10 text-brand",
+        status === "pending" && "bg-warning/15 text-warning",
+        status === "disapproved" && "bg-danger/10 text-danger",
       )}
     >
-      {status}
+      {status === "pending" ? "Pending review" : status}
     </span>
   );
 }
@@ -801,7 +897,7 @@ function ActionButton({
 
 function EmptyCard({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl border border-black/5 bg-surface p-8 text-center text-muted">
+    <div className="rounded-2xl border border-black/5 bg-surface p-6 text-center text-sm text-muted">
       {text}
     </div>
   );

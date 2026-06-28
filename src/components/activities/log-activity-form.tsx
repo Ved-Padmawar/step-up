@@ -176,13 +176,16 @@ export function LogActivityForm({
         ) : (
           <p className="mt-3 text-muted">
             {result.isStarOfDay
-              ? "Nice — Star of the Day so far!"
-              : "Steps saved and counted toward your score."}
+              ? "Nice — Star of the Day so far (after approval)!"
+              : "Submitted for admin review. Points count after approval."}
           </p>
         )}
         {result.isBeast ? (
           <p className="mt-2 font-medium text-foreground">🔥 Beast Mode unlocked</p>
         ) : null}
+        <p className="mt-4 text-sm text-muted">
+          Submitted for admin review. Points count after approval.
+        </p>
         {result.total !== null ? (
           <p className="mt-4 text-sm text-muted">
             Total score {result.total}
@@ -257,9 +260,11 @@ export function LogActivityForm({
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-foreground">Photo</span>
+          <p className="text-xs text-muted">
+            Choose a screenshot from your fitness app (photo library).
+          </p>
           <input
-            accept="image/*"
-            capture="environment"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
             className="w-full rounded-2xl border border-dashed border-black/15 bg-background px-4 py-3 text-sm"
             onChange={handlePhotoChange}
             required
