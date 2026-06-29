@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera, FloppyDisk, Trash } from "@phosphor-icons/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -197,8 +198,9 @@ export function ProfileForm() {
               </div>
             )}
           </div>
-          <div className="space-y-2">
-            <label className="inline-block cursor-pointer rounded-full bg-brand px-4 py-2 text-sm font-medium text-white">
+          <div className="flex flex-col gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer rounded-full bg-brand px-4 py-2 text-sm font-medium text-white">
+              <Camera size={16} />
               Choose photo
               <input
                 accept="image/*"
@@ -209,7 +211,7 @@ export function ProfileForm() {
             </label>
             {profile.profileImageUrl && !photo ? (
               <button
-                className="block text-sm font-medium text-danger"
+                className="inline-flex items-center gap-1.5 rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger"
                 onClick={() => {
                   setRemovePhoto(true);
                   setPreviewUrl(null);
@@ -217,6 +219,7 @@ export function ProfileForm() {
                 }}
                 type="button"
               >
+                <Trash size={15} />
                 Remove photo
               </button>
             ) : null}
@@ -260,6 +263,7 @@ export function ProfileForm() {
           disabled={saving}
           type="submit"
         >
+          <FloppyDisk className="inline-block mr-2 align-middle" size={18} />
           {saving ? "Saving…" : "Save profile"}
         </button>
       </section>

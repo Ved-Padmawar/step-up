@@ -1,3 +1,4 @@
+import { SignOut } from "@phosphor-icons/react/dist/ssr";
 import { redirect } from "next/navigation";
 
 import { auth, signOut } from "@/auth";
@@ -22,6 +23,7 @@ export default async function ProfilePage() {
           className="w-full rounded-2xl border border-black/10 bg-surface px-4 py-3 text-base font-semibold text-muted transition hover:border-black/20 hover:text-foreground"
           type="submit"
         >
+          <SignOut className="inline-block mr-2 align-middle" size={18} />
           Log out
         </button>
       </form>

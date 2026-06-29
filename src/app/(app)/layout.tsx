@@ -7,8 +7,7 @@ import { computeStandings, getStandingForUser } from "@/lib/standings-service";
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth();
-  const standings = session?.user?.id ? await computeStandings() : [];
+  const [session, standings] = await Promise.all([auth(), computeStandings()]);
   const standing = session?.user?.id
     ? getStandingForUser(standings, session.user.id)
     : undefined;

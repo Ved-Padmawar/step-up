@@ -11,12 +11,12 @@ type WeekLeaderboardPageProps = {
 };
 
 export default async function WeekLeaderboardPage({ params }: WeekLeaderboardPageProps) {
-  const session = await auth();
+  const [session, { weekNo: weekNoStr }] = await Promise.all([auth(), params]);
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const weekNo = Number((await params).weekNo);
+  const weekNo = Number(weekNoStr);
   if (!Number.isInteger(weekNo) || weekNo < 1) {
     notFound();
   }

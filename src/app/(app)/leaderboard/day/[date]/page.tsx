@@ -11,12 +11,11 @@ type DayLeaderboardPageProps = {
 };
 
 export default async function DayLeaderboardPage({ params }: DayLeaderboardPageProps) {
-  const session = await auth();
+  const [session, { date }] = await Promise.all([auth(), params]);
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const { date } = await params;
   const page = await getDailyLeaderboardPage(date);
   if (!page) {
     notFound();
