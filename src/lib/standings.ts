@@ -1,3 +1,5 @@
+import type { Division, Gender } from "./divisions";
+import { DEFAULT_DIVISION, parseDivision } from "./divisions";
 import { isBeastMode } from "./scoring";
 
 export type ChallengeConfigInput = {
@@ -21,6 +23,8 @@ export type UserInput = {
   name: string;
   createdAt: Date;
   profileImageUrl?: string | null;
+  division?: Division;
+  gender?: Gender | null;
 };
 
 export type ActivityInput = {
@@ -42,6 +46,8 @@ export type UserStanding = {
   userId: string;
   name: string;
   profileImageUrl: string | null;
+  division: Division;
+  gender: Gender | null;
   rank: number;
   total: number;
   breakdown: StandingsBreakdown;
@@ -50,6 +56,19 @@ export type UserStanding = {
   weekStarCount: number;
   beastCount: number;
   totalSteps: number;
+};
+
+export type RoyalHolder = {
+  userId: string;
+  name: string;
+  profileImageUrl: string | null;
+  total: number;
+};
+
+export type DivisionRoyals = {
+  kings: RoyalHolder[];
+  queens: RoyalHolder[];
+  isFinal: boolean;
 };
 
 export type StandingsInput = {
@@ -69,6 +88,8 @@ const DEFAULT_CONFIG: ChallengeConfigInput = {
   consistency6: 20,
   consistency7: 35,
 };
+
+const DIVISIONS: Division[] = ["strider", "elite"];
 
 function consistencyBonusForWeek(
   daysMetInWeek: number,
@@ -118,7 +139,11 @@ function hasDayEnded(date: string, today?: string): boolean {
   return date < today;
 }
 
-function hasWeekEnded(weekNo: number, weekEndDates: Map<number, string>, today?: string): boolean {
+function hasWeekEnded(
+  weekNo: number,
+  weekEndDates: Map<number, string>,
+  today?: string,
+): boolean {
   if (!today) {
     return true;
   }
@@ -129,6 +154,76 @@ function hasWeekEnded(weekNo: number, weekEndDates: Map<number, string>, today?:
   return weekEnd < today;
 }
 
+function userDivisionMap(users: UserInput[]): Map<string, Division> {
+  return new Map(
+    users.map((user) => [user.id, parseDivision(user.division ?? DEFAULT_DIVISION)]),
+  );
+}
+
+function compareStandings(
+  a: { total: number; totalSteps: number; createdAt: Date },
+  b: { total: number; totalSteps: number; createdAt: Date },
+): number {
+  if (b.total !== a.total) {
+    return b.total - a.total;
+  }
+  if (b.totalSteps !== a.totalSteps) {
+    return b.totalSteps - a.totalSteps;
+  }
+  return a.createdAt.getTime() - b.createdAt.getTime();
+}
+
+export function filterStandingsByDivision(
+  standings: UserStanding[],
+  division: Division,
+): UserStanding[] {
+  return standings.filter((standing) => standing.division === division);
+}
+
+export function computeDivisionRoyals(
+  standings: UserStanding[],
+  division: Division,
+  challengeEnded: boolean,
+): DivisionRoyals {
+  const inDivision = standings.filter((standing) => standing.division === division);
+
+  return {
+    kings: pickRoyalHolders(inDivision, "male"),
+    queens: pickRoyalHolders(inDivision, "female"),
+    isFinal: challengeEnded,
+  };
+}
+
+function pickRoyalHolders(
+  standings: UserStanding[],
+  gender: Gender,
+): RoyalHolder[] {
+  const candidates = standings.filter((standing) => standing.gender === gender);
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const maxTotal = Math.max(...candidates.map((standing) => standing.total));
+  return candidates
+    .filter((standing) => standing.total === maxTotal)
+    .map((standing) => ({
+      userId: standing.userId,
+      name: standing.name,
+      profileImageUrl: standing.profileImageUrl,
+      total: standing.total,
+    }));
+}
+
+export function isRoyalHolder(
+  royals: DivisionRoyals,
+  userId: string,
+): { isKing: boolean; isQueen: boolean } {
+  return {
+    isKing: royals.kings.some((holder) => holder.userId === userId),
+    isQueen: royals.queens.some((holder) => holder.userId === userId),
+  };
+}
+
 export function computeStandingsFromData(
   input: StandingsInput,
 ): UserStanding[] {
@@ -137,6 +232,7 @@ export function computeStandingsFromData(
   const challengeDayMap = buildChallengeDayMap(input.challengeDays);
   const weekDates = buildWeekDates(input.challengeDays);
   const weekEndDates = buildWeekEndDates(input.challengeDays);
+  const divisionsByUser = userDivisionMap(input.users);
   const approved = input.activities.filter(
     (activity) => activity.status === "approved",
   );
@@ -209,21 +305,26 @@ export function computeStandingsFromData(
       continue;
     }
 
-    const maxSteps = Math.max(...userSteps.values(), 0);
-    if (maxSteps <= 0) {
-      continue;
-    }
+    for (const division of DIVISIONS) {
+      const divisionSteps = [...userSteps.entries()].filter(
+        ([userId]) => divisionsByUser.get(userId) === division,
+      );
+      const maxSteps = Math.max(...divisionSteps.map(([, steps]) => steps), 0);
+      if (maxSteps <= 0) {
+        continue;
+      }
 
-    for (const [userId, steps] of userSteps) {
-      if (steps === maxSteps) {
-        starDayBonusByUser.set(
-          userId,
-          (starDayBonusByUser.get(userId) ?? 0) + config.starOfDayPoints,
-        );
-        starDayCountByUser.set(
-          userId,
-          (starDayCountByUser.get(userId) ?? 0) + 1,
-        );
+      for (const [userId, steps] of divisionSteps) {
+        if (steps === maxSteps) {
+          starDayBonusByUser.set(
+            userId,
+            (starDayBonusByUser.get(userId) ?? 0) + config.starOfDayPoints,
+          );
+          starDayCountByUser.set(
+            userId,
+            (starDayCountByUser.get(userId) ?? 0) + 1,
+          );
+        }
       }
     }
   }
@@ -236,30 +337,35 @@ export function computeStandingsFromData(
       continue;
     }
 
-    const weeklyTotals = new Map<string, number>();
+    for (const division of DIVISIONS) {
+      const weeklyTotals = new Map<string, number>();
 
-    for (const user of input.users) {
-      weeklyTotals.set(
-        user.id,
-        stepsByUserWeek.get(user.id)?.get(weekNo) ?? 0,
-      );
-    }
-
-    const maxWeeklySteps = Math.max(...weeklyTotals.values(), 0);
-    if (maxWeeklySteps <= 0) {
-      continue;
-    }
-
-    for (const [userId, weeklySteps] of weeklyTotals) {
-      if (weeklySteps === maxWeeklySteps) {
-        weekStarBonusByUser.set(
-          userId,
-          (weekStarBonusByUser.get(userId) ?? 0) + config.starOfWeekPoints,
+      for (const user of input.users) {
+        if (divisionsByUser.get(user.id) !== division) {
+          continue;
+        }
+        weeklyTotals.set(
+          user.id,
+          stepsByUserWeek.get(user.id)?.get(weekNo) ?? 0,
         );
-        weekStarCountByUser.set(
-          userId,
-          (weekStarCountByUser.get(userId) ?? 0) + 1,
-        );
+      }
+
+      const maxWeeklySteps = Math.max(...weeklyTotals.values(), 0);
+      if (maxWeeklySteps <= 0) {
+        continue;
+      }
+
+      for (const [userId, weeklySteps] of weeklyTotals) {
+        if (weeklySteps === maxWeeklySteps) {
+          weekStarBonusByUser.set(
+            userId,
+            (weekStarBonusByUser.get(userId) ?? 0) + config.starOfWeekPoints,
+          );
+          weekStarCountByUser.set(
+            userId,
+            (weekStarCountByUser.get(userId) ?? 0) + 1,
+          );
+        }
       }
     }
   }
@@ -302,6 +408,8 @@ export function computeStandingsFromData(
       userId: user.id,
       name: user.name,
       profileImageUrl: user.profileImageUrl ?? null,
+      division: parseDivision(user.division ?? DEFAULT_DIVISION),
+      gender: user.gender ?? null,
       rank: 0,
       total,
       breakdown,
@@ -314,23 +422,23 @@ export function computeStandingsFromData(
     };
   });
 
-  standings.sort((a, b) => {
-    if (b.total !== a.total) {
-      return b.total - a.total;
-    }
-    if (b.totalSteps !== a.totalSteps) {
-      return b.totalSteps - a.totalSteps;
-    }
-    return a.createdAt.getTime() - b.createdAt.getTime();
-  });
+  const ranked: UserStanding[] = [];
 
-  return standings.map((standing, index) => {
-    const { createdAt: _createdAt, ...rest } = standing;
-    return {
-      ...rest,
-      rank: index + 1,
-    };
-  });
+  for (const division of DIVISIONS) {
+    const divisionStandings = standings
+      .filter((standing) => standing.division === division)
+      .sort(compareStandings);
+
+    divisionStandings.forEach((standing, index) => {
+      const { createdAt: _createdAt, ...rest } = standing;
+      ranked.push({
+        ...rest,
+        rank: index + 1,
+      });
+    });
+  }
+
+  return ranked;
 }
 
 export function getStandingForUser(

@@ -7,11 +7,13 @@ import {
   users,
 } from "@/db/schema";
 import { getTodayDateString } from "@/lib/dates";
+import { parseDivision, parseGender } from "@/lib/divisions";
 
 import type { StandingsInput } from "./standings";
 
 export type ScoringDataset = StandingsInput & {
   calendarToday: string;
+  challengeEndDate: string;
 };
 
 function isTransientDbError(error: unknown): boolean {
@@ -57,6 +59,8 @@ export async function loadScoringDataset(): Promise<ScoringDataset> {
           name: users.name,
           createdAt: users.createdAt,
           profileImageUrl: users.profileImageUrl,
+          division: users.division,
+          gender: users.gender,
         })
         .from(users),
       db
@@ -88,11 +92,14 @@ export async function loadScoringDataset(): Promise<ScoringDataset> {
 
     return {
       calendarToday,
+      challengeEndDate: configRow.endDate,
       users: allUsers.map((user) => ({
         id: user.id,
         name: user.name,
         createdAt: user.createdAt,
         profileImageUrl: user.profileImageUrl,
+        division: parseDivision(user.division),
+        gender: parseGender(user.gender),
       })),
       activities: allActivities.map((activity) => ({
         userId: activity.userId,

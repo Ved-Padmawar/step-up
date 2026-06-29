@@ -1,10 +1,9 @@
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { auth } from "@/auth";
-import {
-  PeriodLeaderboardView,
-  formatWeekTitle,
-} from "@/components/leaderboard/period-leaderboard-view";
+import { DivisionPeriodBoard } from "@/components/leaderboard/division-period-board";
+import { formatWeekTitle } from "@/components/leaderboard/period-leaderboard-view";
 import { getWeeklyLeaderboardPage } from "@/lib/period-leaderboard-service";
 
 type WeekLeaderboardPageProps = {
@@ -30,19 +29,27 @@ export default async function WeekLeaderboardPage({ params }: WeekLeaderboardPag
   const periodEnded = page.week.endDate < page.calendarToday;
 
   return (
-    <PeriodLeaderboardView
-      backHref="/leaderboard/weeks"
-      backLabel="All past weeks"
-      currentUserId={session.user.id}
-      entries={page.entries}
-      metricLabel="steps"
-      periodEnded={periodEnded}
-      subtitle={formatWeekTitle(
-        page.week.weekNo,
-        page.week.startDate,
-        page.week.endDate,
-      )}
-      title={periodEnded ? "Week board" : "This week’s board"}
-    />
+    <Suspense
+      fallback={
+        <div className="rounded-3xl border border-black/5 bg-surface p-8 text-center text-muted">
+          Loading week board…
+        </div>
+      }
+    >
+      <DivisionPeriodBoard
+        backHref="/leaderboard/weeks"
+        backLabel="All past weeks"
+        currentUserId={session.user.id}
+        entriesByDivision={page.entriesByDivision}
+        metricLabel="steps"
+        periodEnded={periodEnded}
+        subtitle={formatWeekTitle(
+          page.week.weekNo,
+          page.week.startDate,
+          page.week.endDate,
+        )}
+        title={periodEnded ? "Week board" : "This week’s board"}
+      />
+    </Suspense>
   );
 }

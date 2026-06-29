@@ -21,6 +21,9 @@ export default async function ActivitiesPage() {
     <div className="space-y-6 pb-4">
       <ActivitiesSummary
         currentWeek={currentWeek}
+        division={dashboard.division}
+        isKing={dashboard.isKing}
+        isQueen={dashboard.isQueen}
         participantCount={dashboard.participantCount}
         standing={dashboard.standing}
         weekStats={dashboard.weekStats}

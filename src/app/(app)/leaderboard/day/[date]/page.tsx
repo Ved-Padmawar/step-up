@@ -1,10 +1,9 @@
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { auth } from "@/auth";
-import {
-  PeriodLeaderboardView,
-  formatDayTitle,
-} from "@/components/leaderboard/period-leaderboard-view";
+import { DivisionPeriodBoard } from "@/components/leaderboard/division-period-board";
+import { formatDayTitle } from "@/components/leaderboard/period-leaderboard-view";
 import { getDailyLeaderboardPage } from "@/lib/period-leaderboard-service";
 
 type DayLeaderboardPageProps = {
@@ -26,16 +25,24 @@ export default async function DayLeaderboardPage({ params }: DayLeaderboardPageP
   const periodEnded = page.day.date < page.calendarToday;
 
   return (
-    <PeriodLeaderboardView
-      backHref="/leaderboard/days"
-      backLabel="All past days"
-      currentUserId={session.user.id}
-      entries={page.entries}
-      metricLabel="steps"
-      periodEnded={periodEnded}
-      showBasePoints
-      subtitle={`${formatDayTitle(page.day.date)} · target ${page.day.targetSteps.toLocaleString("en-IN")} steps`}
-      title={periodEnded ? "Day board" : "Today’s board"}
-    />
+    <Suspense
+      fallback={
+        <div className="rounded-3xl border border-black/5 bg-surface p-8 text-center text-muted">
+          Loading day board…
+        </div>
+      }
+    >
+      <DivisionPeriodBoard
+        backHref="/leaderboard/days"
+        backLabel="All past days"
+        currentUserId={session.user.id}
+        entriesByDivision={page.entriesByDivision}
+        metricLabel="steps"
+        periodEnded={periodEnded}
+        showBasePoints
+        subtitle={`${formatDayTitle(page.day.date)} · target ${page.day.targetSteps.toLocaleString("en-IN")} steps`}
+        title={periodEnded ? "Day board" : "Today’s board"}
+      />
+    </Suspense>
   );
 }

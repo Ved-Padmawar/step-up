@@ -25,8 +25,9 @@ export default async function LeaderboardPage() {
         currentDaily={data.currentDaily}
         currentUserId={data.currentUserId}
         currentWeekly={data.currentWeekly}
-        overallStandings={data.overallStandings}
         periods={data.periods}
+        standingsByDivision={data.standingsByDivision}
+        viewerDivision={data.viewerDivision}
       />
     </Suspense>
   );

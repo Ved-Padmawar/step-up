@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, getSession } from "next-auth/react";
 import { useState } from "react";
@@ -48,14 +47,7 @@ export function LoginForm() {
     <AuthCard
       title="Log in"
       subtitle="Track your steps and climb the leaderboard."
-      footer={
-        <>
-          New here?{" "}
-          <Link href="/register" className="font-medium text-brand">
-            Create an account
-          </Link>
-        </>
-      }
+      footer={null}
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <label className="block space-y-2">

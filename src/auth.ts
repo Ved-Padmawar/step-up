@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { getDb } from "@/db";
 import { appConfig } from "@/config";
 import { users } from "@/db/schema";
+import { parseDivision } from "@/lib/divisions";
 import { normalizeMobile, validateIndianMobile } from "@/lib/mobile";
 import { verifyPassword } from "@/lib/password";
 import { getUserProfile } from "@/lib/user-service";
@@ -18,6 +19,7 @@ declare module "next-auth" {
       emailVerified: Date | null;
       mobile: string;
       role: string;
+      division: string;
       profileImageUrl: string | null;
       mustChangePassword: boolean;
     };
@@ -30,6 +32,7 @@ declare module "next-auth" {
     emailVerified: Date | null;
     mobile: string;
     role: string;
+    division: string;
     profileImageUrl: string | null;
     mustChangePassword: boolean;
   }
@@ -50,6 +53,7 @@ async function enrichSessionFromDb(
 
   session.user.name = profile.name;
   session.user.profileImageUrl = profile.profileImageUrl;
+  session.user.division = profile.division;
   return session;
 }
 
@@ -82,6 +86,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: users.name,
             mobile: users.mobile,
             role: users.role,
+            division: users.division,
             passwordHash: users.passwordHash,
             profileImageUrl: users.profileImageUrl,
             mustChangePassword: users.mustChangePassword,
@@ -106,6 +111,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           emailVerified: null,
           mobile: user.mobile,
           role: user.role,
+          division: parseDivision(user.division),
           profileImageUrl: user.profileImageUrl,
           mustChangePassword: user.mustChangePassword,
         } satisfies import("next-auth").User;
@@ -118,6 +124,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.name = user.name;
         token.role = user.role;
+        token.division = user.division;
         token.mobile = user.mobile;
         token.profileImageUrl = user.profileImageUrl ?? null;
         token.mustChangePassword = user.mustChangePassword;
@@ -145,6 +152,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         emailVerified: null,
         mobile: String(token.mobile ?? ""),
         role: String(token.role ?? "user"),
+        division: String(token.division ?? "strider"),
         profileImageUrl:
           token.profileImageUrl === undefined || token.profileImageUrl === null
             ? null

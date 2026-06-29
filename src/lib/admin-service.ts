@@ -9,6 +9,8 @@ import {
 import {
   ActivityError,
 } from "@/lib/activities-service";
+import type { Division, Gender } from "@/lib/divisions";
+import { isValidGender, parseDivision, parseGender } from "@/lib/divisions";
 import { distanceKmToStorage, parseDistanceKm } from "@/lib/distance";
 import { DEFAULT_PARTICIPANT_PASSWORD } from "@/lib/default-password";
 import { computeBasePoints } from "@/lib/scoring";
@@ -21,6 +23,7 @@ export type AdminActivityRow = {
   userId: string;
   userName: string;
   userMobile: string;
+  userDivision: Division;
   activityDate: string;
   steps: number;
   distanceKm: string;
@@ -39,6 +42,8 @@ export type AdminUserRow = {
   name: string;
   mobile: string;
   role: string;
+  division: Division;
+  gender: Gender | null;
   mustChangePassword: boolean;
   createdAt: Date;
 };
@@ -47,6 +52,7 @@ export async function listAdminActivities(filters?: {
   userId?: string;
   date?: string;
   status?: string;
+  division?: Division;
 }): Promise<AdminActivityRow[]> {
   const db = getDb();
   const conditions = [];
@@ -67,6 +73,7 @@ export async function listAdminActivities(filters?: {
       userId: activities.userId,
       userName: users.name,
       userMobile: users.mobile,
+      userDivision: users.division,
       activityDate: activities.activityDate,
       steps: activities.steps,
       distanceKm: activities.distanceKm,
@@ -85,7 +92,14 @@ export async function listAdminActivities(filters?: {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(activities.activityDate), asc(users.name));
 
-  return rows;
+  const filtered = filters?.division
+    ? rows.filter((row) => parseDivision(row.userDivision) === filters.division)
+    : rows;
+
+  return filtered.map((row) => ({
+    ...row,
+    userDivision: parseDivision(row.userDivision),
+  }));
 }
 
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
@@ -97,11 +111,20 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      division: users.division,
+      gender: users.gender,
       mustChangePassword: users.mustChangePassword,
       createdAt: users.createdAt,
     })
     .from(users)
-    .orderBy(asc(users.name));
+    .orderBy(asc(users.name))
+    .then((rows) =>
+      rows.map((row) => ({
+        ...row,
+        division: parseDivision(row.division),
+        gender: parseGender(row.gender),
+      })),
+    );
 }
 
 export async function updateAdminActivity(
@@ -267,14 +290,120 @@ export async function updateAdminUserRole(
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      division: users.division,
+      gender: users.gender,
       mustChangePassword: users.mustChangePassword,
+      createdAt: users.createdAt,
     });
 
   if (!updated) {
     throw new ActivityError("User not found.", 404);
   }
 
-  return updated;
+  return mapAdminUserRow(updated);
+}
+
+export async function updateAdminUserProfile(
+  userId: string,
+  input: {
+    name?: string;
+    mobile?: string;
+    division?: Division;
+    gender?: Gender | null;
+  },
+) {
+  const updates: {
+    name?: string;
+    mobile?: string;
+    division?: Division;
+    gender?: Gender | null;
+  } = {};
+
+  if (input.name !== undefined) {
+    updates.name = validateParticipantName(input.name);
+  }
+
+  if (input.mobile !== undefined) {
+    const mobile = normalizeMobile(input.mobile);
+    if (!validateIndianMobile(mobile)) {
+      throw new ActivityError("Enter a valid 10-digit Indian mobile number.", 400);
+    }
+
+    const db = getDb();
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.mobile, mobile), ne(users.id, userId)))
+      .limit(1);
+
+    if (existing) {
+      throw new ActivityError("This mobile number is already registered.", 409);
+    }
+
+    updates.mobile = mobile;
+  }
+
+  if (input.division !== undefined) {
+    if (input.division !== "elite" && input.division !== "strider") {
+      throw new ActivityError("Division must be elite or strider.", 400);
+    }
+    updates.division = input.division;
+  }
+
+  if (input.gender !== undefined) {
+    if (input.gender !== null && !isValidGender(input.gender)) {
+      throw new ActivityError("Gender must be male, female, other, or null.", 400);
+    }
+    updates.gender = input.gender;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new ActivityError("No profile fields to update.", 400);
+  }
+
+  const db = getDb();
+  const [updated] = await db
+    .update(users)
+    .set(updates)
+    .where(eq(users.id, userId))
+    .returning({
+      id: users.id,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+      division: users.division,
+      gender: users.gender,
+      mustChangePassword: users.mustChangePassword,
+      createdAt: users.createdAt,
+    });
+
+  if (!updated) {
+    throw new ActivityError("User not found.", 404);
+  }
+
+  return mapAdminUserRow(updated);
+}
+
+function mapAdminUserRow(row: {
+  id: string;
+  name: string;
+  mobile: string;
+  role: string;
+  division: string | null;
+  gender: string | null;
+  mustChangePassword: boolean;
+  createdAt: Date;
+}): AdminUserRow {
+  return {
+    id: row.id,
+    name: row.name,
+    mobile: row.mobile,
+    role: row.role,
+    division: parseDivision(row.division),
+    gender: parseGender(row.gender),
+    mustChangePassword: row.mustChangePassword,
+    createdAt: row.createdAt,
+  };
 }
 
 function validateParticipantName(name: string): string {
@@ -316,6 +445,7 @@ export async function createAdminParticipant(input: {
       mobile,
       passwordHash,
       role: "user",
+      division: "strider",
       mustChangePassword: true,
     })
     .returning({
@@ -323,11 +453,17 @@ export async function createAdminParticipant(input: {
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      division: users.division,
+      gender: users.gender,
       mustChangePassword: users.mustChangePassword,
       createdAt: users.createdAt,
     });
 
-  return created;
+  return {
+    ...created!,
+    division: parseDivision(created!.division),
+    gender: parseGender(created!.gender),
+  };
 }
 
 export async function resetAdminUserPassword(

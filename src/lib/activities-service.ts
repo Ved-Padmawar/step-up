@@ -17,6 +17,11 @@ import {
 } from "@/lib/dates";
 import { computeBasePoints, isBeastMode } from "@/lib/scoring";
 import { computeStandings, getStandingForUser } from "@/lib/standings-service";
+import {
+  computeDivisionRoyals,
+  filterStandingsByDivision,
+  isRoyalHolder,
+} from "@/lib/standings";
 import { distanceKmToStorage, parseDistanceKm } from "@/lib/distance";
 
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -206,6 +211,17 @@ export async function getActivitiesDashboard(userId: string) {
     today,
   );
   const standing = getStandingForUser(standings, userId);
+  const divisionStandings = standing
+    ? filterStandingsByDivision(standings, standing.division)
+    : [];
+  const challengeEnded = today > config.endDate;
+  const royals = standing
+    ? computeDivisionRoyals(standings, standing.division, challengeEnded)
+    : null;
+  const royalFlags =
+    standing && royals
+      ? isRoyalHolder(royals, userId)
+      : { isKing: false, isQueen: false };
 
   const dayRows: DashboardDay[] = days
     .slice()
@@ -266,7 +282,10 @@ export async function getActivitiesDashboard(userId: string) {
   return {
     today,
     standing,
-    participantCount: standings.length,
+    participantCount: divisionStandings.length,
+    division: standing?.division ?? "strider",
+    isKing: royalFlags.isKing,
+    isQueen: royalFlags.isQueen,
     dayRows,
     loggedActivities,
     weekStats,

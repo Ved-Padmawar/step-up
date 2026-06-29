@@ -3,13 +3,18 @@
 import Link from "next/link";
 
 import type { DashboardDay, WeekStat } from "@/lib/activities-service";
+import type { Division } from "@/lib/divisions";
 import type { UserStanding } from "@/lib/standings";
 import { formatDisplayDate } from "@/lib/dates";
 import { formatDistanceKm } from "@/lib/distance";
+import { DivisionRankLabel, EliteBadge } from "@/components/app/division-badge";
 
 type ActivitiesSummaryProps = {
   standing?: UserStanding;
   participantCount: number;
+  division: Division;
+  isKing: boolean;
+  isQueen: boolean;
   currentWeek?: number;
   weekStats: WeekStat[];
 };
@@ -17,6 +22,9 @@ type ActivitiesSummaryProps = {
 export function ActivitiesSummary({
   standing,
   participantCount,
+  division,
+  isKing,
+  isQueen,
   currentWeek = 1,
   weekStats,
 }: ActivitiesSummaryProps) {
@@ -33,7 +41,20 @@ export function ActivitiesSummary({
     <section className="rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-6 text-white shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {division === "elite" ? <EliteBadge /> : null}
+            {isKing ? (
+              <span className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
+                👑 King
+              </span>
+            ) : null}
+            {isQueen ? (
+              <span className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
+                👑 Queen
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-3 sm:gap-4">
             <SummaryStat label="Total points" value={standing?.total ?? 0} />
             <SummaryStat
               label="Total steps"
@@ -49,9 +70,12 @@ export function ActivitiesSummary({
               {breakdown.base} from steps · {bonusTotal} in bonuses
             </p>
           ) : null}
-          <p className="mt-2 text-sm text-white/85">
-            Rank #{standing?.rank ?? "–"} of {participantCount || "–"}
-          </p>
+          <DivisionRankLabel
+            className="mt-2 text-sm text-white/85"
+            division={division}
+            participantCount={participantCount}
+            rank={standing?.rank ?? "–"}
+          />
         </div>
         <div className="rounded-2xl bg-white/10 px-3 py-2 text-right text-sm">
           <p>⭐ {standing?.starDayCount ?? 0}</p>

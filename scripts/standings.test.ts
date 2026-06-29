@@ -326,4 +326,38 @@ describe("computeStandingsFromData", () => {
     assert.equal(standings[1]?.rank, 2);
     assert.equal(standings[2]?.rank, 3);
   });
+
+  it("awards star of the day separately per division", () => {
+    const standings = computeStandingsFromData(
+      makeInput({
+        today: "2026-06-30",
+        users: [
+          { id: "e1", name: "Elite Ace", createdAt: new Date("2026-06-01"), division: "elite" },
+          { id: "s1", name: "Strider Ace", createdAt: new Date("2026-06-02"), division: "strider" },
+        ],
+        activities: [
+          {
+            userId: "e1",
+            activityDate: "2026-06-29",
+            steps: 9000,
+            basePoints: 25,
+            status: "approved",
+          },
+          {
+            userId: "s1",
+            activityDate: "2026-06-29",
+            steps: 7000,
+            basePoints: 15,
+            status: "approved",
+          },
+        ],
+      }),
+    );
+
+    const elite = standings.find((row) => row.userId === "e1");
+    const strider = standings.find((row) => row.userId === "s1");
+
+    assert.equal(elite?.breakdown.starDay, 50);
+    assert.equal(strider?.breakdown.starDay, 50);
+  });
 });

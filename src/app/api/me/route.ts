@@ -4,7 +4,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { ActivityError } from "@/lib/activities-service";
 import { computeStandings, getStandingForUser } from "@/lib/standings-service";
+import {
+  computeDivisionRoyals,
+  filterStandingsByDivision,
+  isRoyalHolder,
+} from "@/lib/standings";
 import { getUserProfile, updateUserProfile } from "@/lib/user-service";
+import { loadScoringDataset } from "@/lib/scoring-dataset";
 
 export async function GET() {
   const session = await auth();
@@ -12,9 +18,10 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [profile, standings] = await Promise.all([
+  const [profile, standings, dataset] = await Promise.all([
     getUserProfile(session.user.id),
     computeStandings(),
+    loadScoringDataset(),
   ]);
 
   if (!profile) {
@@ -22,11 +29,19 @@ export async function GET() {
   }
 
   const standing = getStandingForUser(standings, session.user.id);
+  const divisionStandings = filterStandingsByDivision(standings, profile.division);
+  const challengeEnded = dataset.calendarToday > dataset.challengeEndDate;
+  const royals = computeDivisionRoyals(standings, profile.division, challengeEnded);
+  const royalFlags = isRoyalHolder(royals, session.user.id);
 
   return NextResponse.json({
     user: profile,
     standing,
-    participantCount: standings.length,
+    participantCount: divisionStandings.length,
+    division: profile.division,
+    isKing: royalFlags.isKing,
+    isQueen: royalFlags.isQueen,
+    royals,
   });
 }
 

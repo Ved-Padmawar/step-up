@@ -1,5 +1,10 @@
-import type { UserStanding } from "./standings";
-import { computeStandingsFromData } from "./standings";
+import type { Division } from "./divisions";
+import type { UserStanding, DivisionRoyals } from "./standings";
+import {
+  computeDivisionRoyals,
+  computeStandingsFromData,
+  filterStandingsByDivision,
+} from "./standings";
 import { loadScoringDataset } from "./scoring-dataset";
 import {
   buildChallengePeriodContext,
@@ -10,42 +15,103 @@ import {
   type PeriodLeaderboardEntry,
 } from "./period-leaderboard";
 
+const DIVISIONS: Division[] = ["strider", "elite"];
+
+function computeDailyForDivisions(
+  dataset: Awaited<ReturnType<typeof loadScoringDataset>>,
+  date: string,
+): Record<Division, PeriodLeaderboardEntry[]> {
+  return {
+    strider: computeDailyLeaderboard({
+      date,
+      division: "strider",
+      users: dataset.users,
+      activities: dataset.activities,
+      challengeDays: dataset.challengeDays,
+      config: dataset.config,
+      calendarToday: dataset.calendarToday,
+    }),
+    elite: computeDailyLeaderboard({
+      date,
+      division: "elite",
+      users: dataset.users,
+      activities: dataset.activities,
+      challengeDays: dataset.challengeDays,
+      config: dataset.config,
+      calendarToday: dataset.calendarToday,
+    }),
+  };
+}
+
+function computeWeeklyForDivisions(
+  dataset: Awaited<ReturnType<typeof loadScoringDataset>>,
+  weekNo: number,
+): Record<Division, PeriodLeaderboardEntry[]> {
+  return {
+    strider: computeWeeklyLeaderboard({
+      weekNo,
+      division: "strider",
+      users: dataset.users,
+      activities: dataset.activities,
+      challengeDays: dataset.challengeDays,
+      config: dataset.config,
+      calendarToday: dataset.calendarToday,
+    }),
+    elite: computeWeeklyLeaderboard({
+      weekNo,
+      division: "elite",
+      users: dataset.users,
+      activities: dataset.activities,
+      challengeDays: dataset.challengeDays,
+      config: dataset.config,
+      calendarToday: dataset.calendarToday,
+    }),
+  };
+}
+
+function buildRoyalsByDivision(
+  standings: UserStanding[],
+  challengeEnded: boolean,
+): Record<Division, DivisionRoyals> {
+  return {
+    strider: computeDivisionRoyals(standings, "strider", challengeEnded),
+    elite: computeDivisionRoyals(standings, "elite", challengeEnded),
+  };
+}
+
 export async function getLeaderboardHubData(currentUserId: string) {
   const dataset = await loadScoringDataset();
   const periods = buildChallengePeriodContext(
     dataset.challengeDays,
     dataset.calendarToday,
   );
-  const overallStandings: UserStanding[] = computeStandingsFromData(dataset);
+  const overallStandings = computeStandingsFromData(dataset);
+  const challengeEnded = dataset.calendarToday > dataset.challengeEndDate;
+  const royalsByDivision = buildRoyalsByDivision(overallStandings, challengeEnded);
 
   const currentDaily = periods.currentDay
-    ? computeDailyLeaderboard({
-        date: periods.currentDay.date,
-        users: dataset.users,
-        activities: dataset.activities,
-        challengeDays: dataset.challengeDays,
-        config: dataset.config,
-        calendarToday: dataset.calendarToday,
-      })
-    : [];
+    ? computeDailyForDivisions(dataset, periods.currentDay.date)
+    : { strider: [], elite: [] };
 
   const currentWeekly = periods.currentWeek
-    ? computeWeeklyLeaderboard({
-        weekNo: periods.currentWeek.weekNo,
-        users: dataset.users,
-        activities: dataset.activities,
-        challengeDays: dataset.challengeDays,
-        config: dataset.config,
-        calendarToday: dataset.calendarToday,
-      })
-    : [];
+    ? computeWeeklyForDivisions(dataset, periods.currentWeek.weekNo)
+    : { strider: [], elite: [] };
+
+  const viewer = overallStandings.find((row) => row.userId === currentUserId);
 
   return {
     currentUserId,
     periods,
+    challengeEndDate: dataset.challengeEndDate,
     overallStandings,
+    standingsByDivision: {
+      strider: filterStandingsByDivision(overallStandings, "strider"),
+      elite: filterStandingsByDivision(overallStandings, "elite"),
+    },
+    royalsByDivision,
     currentDaily,
     currentWeekly,
+    viewerDivision: viewer?.division ?? "strider",
   };
 }
 
@@ -56,17 +122,15 @@ export async function getDailyLeaderboardPage(date: string) {
     return null;
   }
 
+  const overallStandings = computeStandingsFromData(dataset);
+  const challengeEnded = dataset.calendarToday > dataset.challengeEndDate;
+
   return {
     calendarToday: dataset.calendarToday,
+    challengeEndDate: dataset.challengeEndDate,
     day,
-    entries: computeDailyLeaderboard({
-      date,
-      users: dataset.users,
-      activities: dataset.activities,
-      challengeDays: dataset.challengeDays,
-      config: dataset.config,
-      calendarToday: dataset.calendarToday,
-    }),
+    entriesByDivision: computeDailyForDivisions(dataset, date),
+    royalsByDivision: buildRoyalsByDivision(overallStandings, challengeEnded),
   };
 }
 
@@ -77,17 +141,15 @@ export async function getWeeklyLeaderboardPage(weekNo: number) {
     return null;
   }
 
+  const overallStandings = computeStandingsFromData(dataset);
+  const challengeEnded = dataset.calendarToday > dataset.challengeEndDate;
+
   return {
     calendarToday: dataset.calendarToday,
+    challengeEndDate: dataset.challengeEndDate,
     week,
-    entries: computeWeeklyLeaderboard({
-      weekNo,
-      users: dataset.users,
-      activities: dataset.activities,
-      challengeDays: dataset.challengeDays,
-      config: dataset.config,
-      calendarToday: dataset.calendarToday,
-    }),
+    entriesByDivision: computeWeeklyForDivisions(dataset, weekNo),
+    royalsByDivision: buildRoyalsByDivision(overallStandings, challengeEnded),
   };
 }
 

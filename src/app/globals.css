@@ -56,10 +56,28 @@ textarea:focus-visible {
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   }
 
+  [data-slot="bottom-nav-link"][data-active] svg {
+    color: rgb(255 255 255);
+  }
+
   [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"][data-active],
   [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"][aria-selected="true"] {
     background-color: rgb(var(--brand) / 0.1);
     color: rgb(var(--brand));
     font-weight: 600;
   }
+}
+
+@keyframes sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-slide-up {
+  animation: sheet-slide-up 0.25s ease-out;
 }

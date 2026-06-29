@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+  AdminActivityRow,
+  AdminUserRow,
+} from "@/lib/admin-service";
+import type {
   AdminScoringResult,
   DayScoringRunRecord,
   WeekScoringRunRecord,
 } from "@/lib/scoring-admin-service";
-import type {
-  AdminActivityRow,
-  AdminUserRow,
-} from "@/lib/admin-service";
+import type { Division, Gender } from "@/lib/divisions";
 import { cn } from "@/lib/cn";
 import { photoProxyUrl } from "@/lib/blob-storage";
 import { formatDisplayDate } from "@/lib/dates";
@@ -20,6 +21,7 @@ import { formatDistanceKm } from "@/lib/distance";
 import { DEFAULT_PARTICIPANT_PASSWORD } from "@/lib/default-password";
 import type { UserStanding } from "@/lib/standings";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select } from "@/components/ui/select";
 
 type ChallengeDayOption = {
   date: string;
@@ -91,8 +93,9 @@ function AdminTabOverflowMenu({
       <button
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="More tabs"
         className={cn(
-          "inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+          "inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand max-[360px]:px-2",
           activeInOverflow
             ? "bg-brand/10 font-semibold text-brand"
             : "text-muted hover:bg-brand/5 hover:text-foreground",
@@ -100,7 +103,10 @@ function AdminTabOverflowMenu({
         onClick={() => onOpenChange(!open)}
         type="button"
       >
-        More
+        <span className="max-[360px]:hidden">More</span>
+        <span aria-hidden="true" className="hidden text-base leading-none max-[360px]:inline">
+          ···
+        </span>
         <ChevronDownIcon className={cn("size-4 transition", open && "rotate-180")} />
       </button>
 
@@ -191,6 +197,7 @@ export function AdminPanel({
   const [scoringBusy, setScoringBusy] = useState(false);
   const [userFilter, setUserFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [divisionFilter, setDivisionFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [addParticipantOpen, setAddParticipantOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -213,13 +220,14 @@ export function AdminPanel({
     [activities],
   );
 
-  const hasActiveFilters = Boolean(userFilter || dateFilter);
+  const hasActiveFilters = Boolean(userFilter || dateFilter || divisionFilter);
   const isActivitiesTab = adminTab === "review" || adminTab === "approved";
 
   const filteredActivities = useMemo(() => {
     return activities.filter((row) => {
       if (userFilter && row.userId !== userFilter) return false;
       if (dateFilter && row.activityDate !== dateFilter) return false;
+      if (divisionFilter && row.userDivision !== divisionFilter) return false;
       if (adminTab === "review") {
         return row.status === "pending" || row.status === "disapproved";
       }
@@ -228,7 +236,7 @@ export function AdminPanel({
       }
       return false;
     });
-  }, [activities, userFilter, dateFilter, adminTab]);
+  }, [activities, userFilter, dateFilter, divisionFilter, adminTab]);
 
   const visibleTabs = mobileTabOrder.slice(0, VISIBLE_TABS);
   const overflowTabs = mobileTabOrder.slice(VISIBLE_TABS);
@@ -302,6 +310,50 @@ export function AdminPanel({
     setMessage(`${successMessage}${delta}`);
     await refreshActivities();
     router.refresh();
+  }
+
+  async function updateParticipantProfile(
+    user: AdminUserRow,
+    input: {
+      name?: string;
+      mobile?: string;
+      division?: Division;
+      gender?: Gender | null;
+    },
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    setBusyId(user.id);
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    const payload = (await response.json()) as {
+      error?: string;
+      user?: AdminUserRow;
+    };
+
+    setBusyId(null);
+
+    if (!response.ok) {
+      const message = payload.error ?? "Could not update participant.";
+      setError(message);
+      return { ok: false, error: message };
+    }
+
+    if (payload.user) {
+      setParticipantRows((rows) =>
+        rows.map((row) => (row.id === payload.user!.id ? payload.user! : row)),
+      );
+      setMessage(`${payload.user.name} updated.`);
+      router.refresh();
+      return { ok: true };
+    }
+
+    return { ok: false, error: "Could not update participant." };
   }
 
   async function toggleRole(user: AdminUserRow) {
@@ -536,7 +588,7 @@ export function AdminPanel({
             aria-expanded={filtersOpen}
             aria-label="Open activity filters"
             className={cn(
-              "mb-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+              "mb-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand max-[360px]:px-2",
               hasActiveFilters
                 ? "text-brand"
                 : "text-muted hover:bg-brand/5 hover:text-foreground",
@@ -545,7 +597,7 @@ export function AdminPanel({
             type="button"
           >
             <FilterIcon className="size-4" />
-            Filter
+            <span className="max-[360px]:hidden">Filter</span>
             {hasActiveFilters ? (
               <span className="size-1.5 rounded-full bg-brand" />
             ) : null}
@@ -553,51 +605,18 @@ export function AdminPanel({
         ) : null}
       </div>
 
-      <BottomFilterDrawer
+      <ActivityFilterDrawer
+        challengeDays={challengeDays}
+        dateFilter={dateFilter}
+        divisionFilter={divisionFilter}
         onClose={() => setFiltersOpen(false)}
+        onDateChange={setDateFilter}
+        onDivisionChange={setDivisionFilter}
+        onUserChange={setUserFilter}
         open={filtersOpen && isActivitiesTab}
-        title="Filter activities"
-      >
-        <div className="space-y-4">
-          <FilterSelect
-            label="Participant"
-            onChange={setUserFilter}
-            value={userFilter}
-          >
-            <option value="">All participants</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect label="Date" onChange={setDateFilter} value={dateFilter}>
-            <option value="">All dates</option>
-            {challengeDays.map((day) => (
-              <option key={day.date} value={day.date}>
-                {formatDisplayDate(day.date)}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <div className="flex gap-2 pt-1">
-            <ActionButton
-              onClick={() => {
-                setUserFilter("");
-                setDateFilter("");
-                setFiltersOpen(false);
-              }}
-              variant="ghost"
-            >
-              Clear
-            </ActionButton>
-            <ActionButton onClick={() => setFiltersOpen(false)} variant="primary">
-              Done
-            </ActionButton>
-          </div>
-        </div>
-      </BottomFilterDrawer>
+        userFilter={userFilter}
+        users={users}
+      />
 
       {message ? (
         <p className="rounded-xl bg-success/10 px-3 py-2 text-sm text-brand">{message}</p>
@@ -641,6 +660,7 @@ export function AdminPanel({
           onDelete={deleteParticipant}
           onResetPassword={resetParticipantPassword}
           onToggleRole={toggleRole}
+          onUpdateProfile={updateParticipantProfile}
           users={participantRows}
         />
       ) : (
@@ -764,6 +784,11 @@ function ActivityAdminCard({
             <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand">
               W{row.weekNo}
             </span>
+            {row.userDivision === "elite" ? (
+              <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-semibold uppercase text-foreground">
+                Elite
+              </span>
+            ) : null}
             <StatusBadge status={row.status} />
           </div>
           <p className="mt-1 text-sm text-muted">
@@ -809,17 +834,14 @@ function ActivityAdminCard({
           </label>
           <label className="block space-y-1 text-sm sm:col-span-2">
             <span className="font-medium text-foreground">Date</span>
-            <select
-              className="field-input"
-              onChange={(event) => setActivityDate(event.target.value)}
+            <Select
+              onChange={setActivityDate}
+              options={challengeDays.map((day) => ({
+                value: day.date,
+                label: formatDisplayDate(day.date),
+              }))}
               value={activityDate}
-            >
-              {challengeDays.map((day) => (
-                <option key={day.date} value={day.date}>
-                  {formatDisplayDate(day.date)}
-                </option>
-              ))}
-            </select>
+            />
           </label>
           <div className="flex gap-2 sm:col-span-2">
             <ActionButton
@@ -878,6 +900,7 @@ function ParticipantsTab({
   onToggleRole,
   onResetPassword,
   onDelete,
+  onUpdateProfile,
   busyId,
 }: {
   users: AdminUserRow[];
@@ -888,14 +911,77 @@ function ParticipantsTab({
   onToggleRole: (user: AdminUserRow) => void;
   onResetPassword: (user: AdminUserRow) => void;
   onDelete: (user: AdminUserRow) => void;
+  onUpdateProfile: (
+    user: AdminUserRow,
+    input: {
+      name?: string;
+      mobile?: string;
+      division?: Division;
+      gender?: Gender | null;
+    },
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   busyId: string | null;
 }) {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState<AdminUserRow | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editMobile, setEditMobile] = useState("");
+  const [editDivision, setEditDivision] = useState<Division>("strider");
+  const [editGender, setEditGender] = useState("");
+  const [editFormError, setEditFormError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ParticipantConfirmAction | null>(
     null,
   );
+
+  function openEdit(user: AdminUserRow) {
+    setEditUser(user);
+    setEditName(user.name);
+    setEditMobile(user.mobile);
+    setEditDivision(user.division);
+    setEditGender(user.gender ?? "");
+    setEditFormError(null);
+  }
+
+  function closeEdit() {
+    setEditUser(null);
+    setEditFormError(null);
+  }
+
+  function handleSaveEdit() {
+    if (!editUser) {
+      return;
+    }
+
+    setEditFormError(null);
+
+    if (editName.trim().length < 2) {
+      setEditFormError("Enter the participant's name.");
+      return;
+    }
+
+    if (editMobile.replace(/\D/g, "").length < 10) {
+      setEditFormError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    void (async () => {
+      const result = await onUpdateProfile(editUser, {
+        name: editName.trim(),
+        mobile: editMobile,
+        division: editDivision,
+        gender: editGender === "" ? null : (editGender as Gender),
+      });
+
+      if (result.ok) {
+        closeEdit();
+        return;
+      }
+
+      setEditFormError(result.error);
+    })();
+  }
 
   function handleCreate() {
     setFormError(null);
@@ -1009,6 +1095,83 @@ function ParticipantsTab({
         </div>
       </BottomFilterDrawer>
 
+      <BottomFilterDrawer
+        onClose={closeEdit}
+        open={Boolean(editUser)}
+        title="Edit participant"
+      >
+        {editUser ? (
+          <div className="space-y-4">
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium text-foreground">Name</span>
+              <input
+                className="field-input"
+                onChange={(event) => setEditName(event.target.value)}
+                placeholder="Full name"
+                value={editName}
+              />
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium text-foreground">Mobile</span>
+              <input
+                className="field-input"
+                inputMode="numeric"
+                onChange={(event) => setEditMobile(event.target.value)}
+                placeholder="10-digit mobile number"
+                type="tel"
+                value={editMobile}
+              />
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium text-foreground">Division</span>
+              <Select
+                onChange={(value) => setEditDivision(value as Division)}
+                options={[
+                  { value: "strider", label: "Strider" },
+                  { value: "elite", label: "Elite" },
+                ]}
+                value={editDivision}
+              />
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium text-foreground">Gender</span>
+              <Select
+                onChange={setEditGender}
+                options={[
+                  { value: "", label: "Not set" },
+                  { value: "male", label: "Male" },
+                  { value: "female", label: "Female" },
+                  { value: "other", label: "Other" },
+                ]}
+                value={editGender}
+              />
+            </label>
+
+            {editFormError ? (
+              <p className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
+                {editFormError}
+              </p>
+            ) : null}
+
+            <div className="flex gap-2 pt-1">
+              <ActionButton onClick={closeEdit} variant="ghost">
+                Cancel
+              </ActionButton>
+              <ActionButton
+                disabled={busyId === editUser.id}
+                onClick={handleSaveEdit}
+                variant="primary"
+              >
+                Save changes
+              </ActionButton>
+            </div>
+          </div>
+        ) : null}
+      </BottomFilterDrawer>
+
       <ConfirmDialog
         busy={Boolean(confirmAction && busyId === confirmAction.user.id)}
         confirmLabel={confirmCopy?.confirmLabel ?? "Confirm"}
@@ -1036,7 +1199,7 @@ function ParticipantsTab({
                 ) : null}
               </p>
               <p className="text-sm text-muted">
-                {user.mobile} · {user.role === "admin" ? "Admin" : "Participant"}
+                {user.mobile} · {formatParticipantMeta(user)}
               </p>
               {user.mustChangePassword ? (
                 <p className="mt-1 text-xs font-medium text-warning">
@@ -1047,6 +1210,7 @@ function ParticipantsTab({
             {user.id !== currentAdminId ? (
               <ParticipantActionsMenu
                 busy={busyId === user.id}
+                onEdit={() => openEdit(user)}
                 onSelectAction={(type) => setConfirmAction({ type, user })}
                 user={user}
               />
@@ -1062,6 +1226,21 @@ type ParticipantConfirmAction = {
   type: "reset" | "role" | "delete";
   user: AdminUserRow;
 };
+
+function formatParticipantMeta(user: AdminUserRow): string {
+  const role = user.role === "admin" ? "Admin" : "Participant";
+  const division = user.division === "elite" ? "Elite" : "Strider";
+  const gender =
+    user.gender === "male"
+      ? "Male"
+      : user.gender === "female"
+        ? "Female"
+        : user.gender === "other"
+          ? "Other"
+          : null;
+
+  return gender ? `${division} · ${gender} · ${role}` : `${division} · ${role}`;
+}
 
 function getParticipantConfirmCopy(action: ParticipantConfirmAction) {
   const { type, user } = action;
@@ -1098,10 +1277,12 @@ function getParticipantConfirmCopy(action: ParticipantConfirmAction) {
 function ParticipantActionsMenu({
   user,
   busy,
+  onEdit,
   onSelectAction,
 }: {
   user: AdminUserRow;
   busy: boolean;
+  onEdit: () => void;
   onSelectAction: (type: ParticipantConfirmAction["type"]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1132,6 +1313,13 @@ function ParticipantActionsMenu({
             className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] overflow-hidden rounded-xl border border-black/10 bg-surface py-1 shadow-lg ring-1 ring-black/5"
             role="menu"
           >
+            <ParticipantMenuItem
+              label="Edit"
+              onSelect={() => {
+                setOpen(false);
+                onEdit();
+              }}
+            />
             <ParticipantMenuItem
               label="Reset password"
               onSelect={() => {
@@ -1306,17 +1494,14 @@ function ScoringTab({
 
         <label className="mt-4 block space-y-1 text-sm">
           <span className="font-medium text-foreground">Challenge day</span>
-          <select
-            className="field-input"
-            onChange={(event) => onScoreDayInputChange(event.target.value)}
+          <Select
+            onChange={onScoreDayInputChange}
+            options={challengeDays.map((day) => ({
+              value: day.date,
+              label: `${formatDisplayDate(day.date)} · Week ${day.weekNo}`,
+            }))}
             value={scoreDayInput}
-          >
-            {challengeDays.map((day) => (
-              <option key={day.date} value={day.date}>
-                {formatDisplayDate(day.date)} · Week {day.weekNo}
-              </option>
-            ))}
-          </select>
+          />
         </label>
 
         <div className="mt-4">
@@ -1335,19 +1520,14 @@ function ScoringTab({
 
         <label className="mt-4 block space-y-1 text-sm">
           <span className="font-medium text-foreground">Challenge week</span>
-          <select
-            className="field-input"
-            onChange={(event) =>
-              onScoreWeekInputChange(Number(event.target.value))
-            }
-            value={scoreWeekInput}
-          >
-            {weekOptions.map((weekNo) => (
-              <option key={weekNo} value={weekNo}>
-                Week {weekNo}
-              </option>
-            ))}
-          </select>
+          <Select
+            onChange={(value) => onScoreWeekInputChange(Number(value))}
+            options={weekOptions.map((weekNo) => ({
+              value: String(weekNo),
+              label: `Week ${weekNo}`,
+            }))}
+            value={String(scoreWeekInput)}
+          />
         </label>
 
         <div className="mt-4">
@@ -1470,9 +1650,150 @@ function BottomFilterDrawer({
   title: string;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
+
   if (!open) {
     return null;
   }
+
+  return (
+    <div className="fixed inset-0 z-40">
+      <button
+        aria-label="Close"
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        type="button"
+      />
+      <div
+        aria-modal="true"
+        className="animate-sheet-slide-up absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(85vh,640px)] max-w-3xl flex-col rounded-t-3xl bg-surface shadow-[0_-8px_30px_rgb(0_0_0/0.12)] ring-1 ring-black/5"
+        role="dialog"
+      >
+        <div className="shrink-0 px-4 pt-3">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/10" />
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-foreground">{title}</h2>
+            <button
+              className="rounded-lg px-2 py-1 text-sm font-medium text-muted hover:bg-brand/5 hover:text-foreground"
+              onClick={onClose}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+type ActivityFilterKey = "participant" | "division" | "date";
+
+function ActivityFilterDrawer({
+  open,
+  onClose,
+  users,
+  challengeDays,
+  userFilter,
+  divisionFilter,
+  dateFilter,
+  onUserChange,
+  onDivisionChange,
+  onDateChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  users: AdminUserRow[];
+  challengeDays: ChallengeDayOption[];
+  userFilter: string;
+  divisionFilter: string;
+  dateFilter: string;
+  onUserChange: (value: string) => void;
+  onDivisionChange: (value: string) => void;
+  onDateChange: (value: string) => void;
+}) {
+  const [activeFilter, setActiveFilter] = useState<ActivityFilterKey | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setActiveFilter(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (activeFilter) {
+          setActiveFilter(null);
+          return;
+        }
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeFilter, onClose, open]);
+
+  const participantLabel =
+    users.find((user) => user.id === userFilter)?.name ?? "All participants";
+  const divisionLabel =
+    divisionFilter === "elite"
+      ? "Elite"
+      : divisionFilter === "strider"
+        ? "Striders"
+        : "All divisions";
+  const dateLabel = dateFilter
+    ? formatDisplayDate(dateFilter)
+    : "All dates";
+
+  const filterRows: Array<{
+    key: ActivityFilterKey;
+    label: string;
+    value: string;
+  }> = [
+    { key: "participant", label: "Participant", value: participantLabel },
+    { key: "division", label: "Division", value: divisionLabel },
+    { key: "date", label: "Date", value: dateLabel },
+  ];
+
+  function clearFilters() {
+    onUserChange("");
+    onDivisionChange("");
+    onDateChange("");
+    onClose();
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  const detailTitle =
+    activeFilter === "participant"
+      ? "Participant"
+      : activeFilter === "division"
+        ? "Division"
+        : activeFilter === "date"
+          ? "Date"
+          : "Filter activities";
 
   return (
     <div className="fixed inset-0 z-40">
@@ -1484,23 +1805,180 @@ function BottomFilterDrawer({
       />
       <div
         aria-modal="true"
-        className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl rounded-t-3xl bg-surface px-4 pb-8 pt-3 shadow-[0_-8px_30px_rgb(0_0_0/0.12)] ring-1 ring-black/5"
+        className="animate-sheet-slide-up absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(85vh,640px)] max-w-3xl flex-col rounded-t-3xl bg-surface shadow-[0_-8px_30px_rgb(0_0_0/0.12)] ring-1 ring-black/5"
         role="dialog"
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/10" />
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-foreground">{title}</h2>
-          <button
-            className="rounded-lg px-2 py-1 text-sm font-medium text-muted hover:bg-brand/5 hover:text-foreground"
-            onClick={onClose}
-            type="button"
-          >
-            Close
-          </button>
+        <div className="shrink-0 px-4 pt-3">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/10" />
+          <div className="mb-2 flex items-center gap-2">
+            {activeFilter ? (
+              <button
+                aria-label="Back to filters"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-brand/5 hover:text-foreground"
+                onClick={() => setActiveFilter(null)}
+                type="button"
+              >
+                <BackIcon className="size-5" />
+              </button>
+            ) : null}
+            <h2 className="min-w-0 flex-1 text-base font-semibold text-foreground">
+              {detailTitle}
+            </h2>
+          </div>
         </div>
-        {children}
+
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div
+            className={cn(
+              "flex h-full transition-transform duration-200 ease-out",
+              activeFilter ? "-translate-x-full" : "translate-x-0",
+            )}
+          >
+            <div className="h-full w-full shrink-0 overflow-y-auto px-4 pb-4">
+              <ul className="divide-y divide-black/5 rounded-2xl border border-black/5">
+                {filterRows.map((row) => (
+                  <li key={row.key}>
+                    <button
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-brand/5"
+                      onClick={() => setActiveFilter(row.key)}
+                      type="button"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">{row.label}</p>
+                        <p className="truncate text-sm text-muted">{row.value}</p>
+                      </div>
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="h-full w-full shrink-0 overflow-y-auto px-4 pb-4">
+              {activeFilter === "participant" ? (
+                <FilterOptionList
+                  onSelect={onUserChange}
+                  options={[
+                    { value: "", label: "All participants" },
+                    ...users.map((user) => ({ value: user.id, label: user.name })),
+                  ]}
+                  selectedValue={userFilter}
+                />
+              ) : null}
+              {activeFilter === "division" ? (
+                <FilterOptionList
+                  onSelect={onDivisionChange}
+                  options={[
+                    { value: "", label: "All divisions" },
+                    { value: "strider", label: "Striders" },
+                    { value: "elite", label: "Elite" },
+                  ]}
+                  selectedValue={divisionFilter}
+                />
+              ) : null}
+              {activeFilter === "date" ? (
+                <FilterOptionList
+                  onSelect={onDateChange}
+                  options={[
+                    { value: "", label: "All dates" },
+                    ...challengeDays.map((day) => ({
+                      value: day.date,
+                      label: formatDisplayDate(day.date),
+                    })),
+                  ]}
+                  selectedValue={dateFilter}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 gap-2 border-t border-black/5 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <ActionButton onClick={clearFilters} variant="ghost">
+            Clear
+          </ActionButton>
+          <ActionButton onClick={onClose} variant="primary">
+            Done
+          </ActionButton>
+        </div>
       </div>
     </div>
+  );
+}
+
+function FilterOptionList({
+  options,
+  selectedValue,
+  onSelect,
+}: {
+  options: Array<{ value: string; label: string }>;
+  selectedValue: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <ul className="divide-y divide-black/5 rounded-2xl border border-black/5">
+      {options.map((option) => {
+        const selected = option.value === selectedValue;
+
+        return (
+          <li key={option.value || "__all__"}>
+            <button
+              className={cn(
+                "flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm transition hover:bg-brand/5",
+                selected && "bg-brand/10 font-medium text-brand",
+              )}
+              onClick={() => onSelect(option.value)}
+              type="button"
+            >
+              <span>{option.label}</span>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-4 shrink-0 rounded-full border-2",
+                  selected
+                    ? "border-brand bg-brand"
+                    : "border-black/20 bg-transparent",
+                )}
+              />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function BackIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
   );
 }
 
@@ -1518,31 +1996,6 @@ function FilterIcon({ className }: { className?: string }) {
     >
       <path d="M4 6h16M7 12h10M10 18h4" />
     </svg>
-  );
-}
-
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1 text-sm">
-      <span className="font-medium text-foreground">{label}</span>
-      <select
-        className="field-input"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        {children}
-      </select>
-    </label>
   );
 }
 

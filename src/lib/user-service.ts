@@ -10,6 +10,8 @@ import {
   DEFAULT_PARTICIPANT_PASSWORD,
   isDefaultParticipantPassword,
 } from "@/lib/default-password";
+import type { Division, Gender } from "@/lib/divisions";
+import { parseDivision, parseGender } from "@/lib/divisions";
 import { hashPassword, verifyPassword } from "@/lib/password";
 
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -26,6 +28,8 @@ export type UserProfile = {
   name: string;
   mobile: string;
   role: string;
+  division: Division;
+  gender: Gender | null;
   profileImageUrl: string | null;
   createdAt: Date;
 };
@@ -70,6 +74,8 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
       name: users.name,
       mobile: users.mobile,
       role: users.role,
+      division: users.division,
+      gender: users.gender,
       profileImageUrl: users.profileImageUrl,
       createdAt: users.createdAt,
     })
@@ -77,7 +83,15 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     .where(eq(users.id, userId))
     .limit(1);
 
-  return user ?? null;
+  if (!user) {
+    return null;
+  }
+
+  return {
+    ...user,
+    division: parseDivision(user.division),
+    gender: parseGender(user.gender),
+  };
 }
 
 export async function updateUserProfile(

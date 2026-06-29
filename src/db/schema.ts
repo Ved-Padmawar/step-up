@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   role: text("role").notNull().default("user"),
   profileImageUrl: text("profile_image_url"),
+  division: text("division").notNull().default("strider"),
+  gender: text("gender"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

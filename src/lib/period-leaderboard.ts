@@ -1,3 +1,5 @@
+import type { Division } from "./divisions";
+import { parseDivision } from "./divisions";
 import { isBeastMode } from "./scoring";
 import type {
   ActivityInput,
@@ -104,8 +106,13 @@ function rankEntries(
   }));
 }
 
+function usersInDivision(users: UserInput[], division: Division): UserInput[] {
+  return users.filter((user) => parseDivision(user.division) === division);
+}
+
 export function computeDailyLeaderboard(input: {
   date: string;
+  division: Division;
   users: UserInput[];
   activities: ActivityInput[];
   challengeDays: ChallengeDayInput[];
@@ -116,6 +123,8 @@ export function computeDailyLeaderboard(input: {
   if (!day) {
     return [];
   }
+
+  const divisionUsers = usersInDivision(input.users, input.division);
 
   const approvedByUser = new Map<string, ActivityInput>();
   for (const activity of input.activities) {
@@ -129,11 +138,11 @@ export function computeDailyLeaderboard(input: {
   const maxSteps = dayEnded
     ? Math.max(
         0,
-        ...input.users.map((user) => approvedByUser.get(user.id)?.steps ?? 0),
+        ...divisionUsers.map((user) => approvedByUser.get(user.id)?.steps ?? 0),
       )
     : 0;
 
-  const entries = input.users.map((user) => {
+  const entries = divisionUsers.map((user) => {
     const activity = approvedByUser.get(user.id);
     const steps = activity?.steps ?? 0;
     const basePoints = activity?.basePoints ?? 0;
@@ -157,6 +166,7 @@ export function computeDailyLeaderboard(input: {
 
 export function computeWeeklyLeaderboard(input: {
   weekNo: number;
+  division: Division;
   users: UserInput[];
   activities: ActivityInput[];
   challengeDays: ChallengeDayInput[];
@@ -169,6 +179,8 @@ export function computeWeeklyLeaderboard(input: {
   if (weekDates.length === 0) {
     return [];
   }
+
+  const divisionUsers = usersInDivision(input.users, input.division);
 
   const weekEnd = weekDates.reduce((latest, date) => (date > latest ? date : latest));
   const weekEnded = weekEnd < input.calendarToday;
@@ -183,7 +195,7 @@ export function computeWeeklyLeaderboard(input: {
   const beastByUser = new Map<string, boolean>();
   const targetMetDays = new Map<string, number>();
 
-  for (const user of input.users) {
+  for (const user of divisionUsers) {
     stepsByUser.set(user.id, 0);
     baseByUser.set(user.id, 0);
     beastByUser.set(user.id, false);
@@ -222,12 +234,12 @@ export function computeWeeklyLeaderboard(input: {
   }
 
   const maxWeeklySteps = weekEnded
-    ? Math.max(0, ...input.users.map((user) => stepsByUser.get(user.id) ?? 0))
+    ? Math.max(0, ...divisionUsers.map((user) => stepsByUser.get(user.id) ?? 0))
     : 0;
   const representativeTarget =
     weekDayMap.values().next().value?.targetSteps ?? 0;
 
-  const entries = input.users.map((user) => {
+  const entries = divisionUsers.map((user) => {
     const steps = stepsByUser.get(user.id) ?? 0;
     const daysMet = targetMetDays.get(user.id) ?? 0;
 

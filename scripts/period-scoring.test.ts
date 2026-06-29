@@ -9,19 +9,20 @@ import {
 const config = {
   starOfDayPoints: 10,
   starOfWeekPoints: 25,
+  beastMultiplier: 2,
   consistency5: 10,
   consistency6: 20,
   consistency7: 35,
 };
 
 const users = [
-  { id: "u1", name: "Alice", registeredAt: new Date("2026-01-01") },
-  { id: "u2", name: "Bob", registeredAt: new Date("2026-01-02") },
+  { id: "u1", name: "Alice", createdAt: new Date("2026-01-01") },
+  { id: "u2", name: "Bob", createdAt: new Date("2026-01-02") },
 ];
 
 const challengeDays = [
-  { date: "2026-06-01", weekNo: 1, targetSteps: 5000 },
-  { date: "2026-06-02", weekNo: 1, targetSteps: 5000 },
+  { date: "2026-06-01", weekNo: 1, dayRate: 5, targetSteps: 5000 },
+  { date: "2026-06-02", weekNo: 1, dayRate: 5, targetSteps: 5000 },
 ];
 
 describe("computeDayScoringSnapshot", () => {
