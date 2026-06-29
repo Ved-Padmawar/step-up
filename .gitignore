@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+log-activity-redesign.html
 
 # debug
 npm-debug.log*
